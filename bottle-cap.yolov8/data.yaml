@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['Broken Cap', 'Broken Ring', 'Good Cap', 'Loose Cap', 'No Cap']
+
+roboflow:
+  workspace: adams-workspace-hi2ph
+  project: adams-workspace-hi2ph
+  version: dataset
+  license: Private
+  url: https://app.roboflow.com/adams-workspace-hi2ph/adams-workspace-hi2ph/dataset

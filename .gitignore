@@ -1,9 +1,27 @@
 venv/
 env/
 .env
-pycache/
+__pycache__/
 *.py[cod]
 *$py.class
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Project artifacts
+data/processed/
+results/models/
+results/plots/
+results/metrics/
+*.pt
+*.pth
+*.pkl
+*.joblib
+
+# Keep directory placeholders
+!results/models/.gitkeep
+!results/plots/.gitkeep
+!results/metrics/.gitkeep
+
+# Large dataset images (optional - uncomment if you don't want to commit images)
+# bottle-cap.yolov8/train/images/
