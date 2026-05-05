@@ -13,6 +13,10 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from gui.components.data_loader import DataLoaderComponent  # noqa: E402
+from gui.components.augmentation_config import AugmentationConfigComponent  # noqa: E402
+from gui.components.augmentation_viewer import AugmentationViewerComponent  # noqa: E402
+
 
 class MainWindow:
     """Main application window with tabs for different features."""
@@ -65,30 +69,24 @@ class MainWindow:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Placeholder tabs - will be replaced with actual components
-        placeholder_frame_1 = ttk.Frame(self.notebook)
-        self.notebook.add(placeholder_frame_1, text="Data Loader")
-        tk.Label(
-            placeholder_frame_1,
-            text="[Data Loader Tab - Coming Soon]",
-            font=("Arial", 14),
-        ).pack(pady=50)
+        # Data Loader tab (implemented)
+        self.data_loader_tab = DataLoaderComponent(
+            self.notebook,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.data_loader_tab, text="Data Loader")
+        
+        self.augmentation_config_tab = AugmentationConfigComponent(
+            self.notebook
+        )
+        self.notebook.add(self.augmentation_config_tab, text="Augmentation Config")
 
-        placeholder_frame_2 = ttk.Frame(self.notebook)
-        self.notebook.add(placeholder_frame_2, text="Augmentation Config")
-        tk.Label(
-            placeholder_frame_2,
-            text="[Augmentation Config Tab - Coming Soon]",
-            font=("Arial", 14),
-        ).pack(pady=50)
-
-        placeholder_frame_3 = ttk.Frame(self.notebook)
-        self.notebook.add(placeholder_frame_3, text="Augmentation Viewer")
-        tk.Label(
-            placeholder_frame_3,
-            text="[Augmentation Viewer Tab - Coming Soon]",
-            font=("Arial", 14),
-        ).pack(pady=50)
+        self.augmentation_viewer_tab = AugmentationViewerComponent(
+            self.notebook,
+            data_loader=self.data_loader_tab,
+            config_component=self.augmentation_config_tab
+        )
+        self.notebook.add(self.augmentation_viewer_tab, text="Augmentation Viewer")
 
     def _create_status_bar(self) -> None:
         """Create the status bar at the bottom of the window."""

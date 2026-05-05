@@ -109,31 +109,201 @@ class AugmentationConfigComponent(ttk.Frame):
             width=15,
         ).grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
 
+        # Reset button
+        ttk.Button(
+            controls_frame,
+            text="Reset to Defaults",
+            command=self.reset_to_defaults,
+        ).grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
+
     def _create_augmentation_controls(self, parent: ttk.Frame) -> None:
         """Create enable/disable and parameter controls for each augmentation.
 
         Args:
             parent: The parent frame for augmentation controls.
         """
-        # Placeholder structure - will be filled with actual controls
-        augmentations = [
-            ("Rotation", "rotate"),
-            ("Horizontal Flip", "h_flip"),
-            ("Brightness/Contrast", "brightness"),
-            ("Blur", "blur"),
-            ("Gaussian Noise", "noise"),
-        ]
+        # Rotation
+        rotate_frame = ttk.LabelFrame(parent, text="Rotation")
+        rotate_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        for aug_name, aug_key in augmentations:
-            aug_frame = ttk.LabelFrame(parent, text=aug_name)
-            aug_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Checkbutton(
+            rotate_frame,
+            text="Enable Rotation",
+            variable=self.config["rotate_enabled"],
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5)
 
-            # Placeholder for controls
-            tk.Label(
-                aug_frame,
-                text=f"[Parameters for {aug_name} - Coming Soon]",
-                foreground="gray",
-            ).pack(padx=5, pady=5)
+        ttk.Label(rotate_frame, text="Limit (degrees):").grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Spinbox(
+            rotate_frame,
+            from_=0,
+            to=90,
+            textvariable=self.config["rotate_limit"],
+            width=5,
+        ).grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(rotate_frame, text="Probability:").grid(
+            row=2, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            rotate_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["rotate_prob"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=2, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_prob_label(rotate_frame, self.config["rotate_prob"], 2)
+
+        # Horizontal Flip
+        flip_frame = ttk.LabelFrame(parent, text="Horizontal Flip")
+        flip_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Checkbutton(
+            flip_frame,
+            text="Enable Horizontal Flip",
+            variable=self.config["h_flip_enabled"],
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(flip_frame, text="Probability:").grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            flip_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["h_flip_prob"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=1, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_prob_label(flip_frame, self.config["h_flip_prob"], 1)
+
+        # Brightness/Contrast
+        bright_frame = ttk.LabelFrame(parent, text="Brightness / Contrast")
+        bright_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Checkbutton(
+            bright_frame,
+            text="Enable Brightness/Contrast",
+            variable=self.config["brightness_enabled"],
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(bright_frame, text="Brightness Limit:").grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            bright_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["brightness_limit"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=1, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_pct_label(bright_frame, self.config["brightness_limit"], 1)
+
+        ttk.Label(bright_frame, text="Contrast Limit:").grid(
+            row=2, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            bright_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["contrast_limit"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=2, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_pct_label(bright_frame, self.config["contrast_limit"], 2)
+
+        ttk.Label(bright_frame, text="Probability:").grid(
+            row=3, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            bright_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["brightness_prob"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=3, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_prob_label(bright_frame, self.config["brightness_prob"], 3)
+
+        # Blur
+        blur_frame = ttk.LabelFrame(parent, text="Blur")
+        blur_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Checkbutton(
+            blur_frame,
+            text="Enable Blur",
+            variable=self.config["blur_enabled"],
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(blur_frame, text="Probability:").grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            blur_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["blur_prob"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=1, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_prob_label(blur_frame, self.config["blur_prob"], 1)
+
+        # Gaussian Noise
+        noise_frame = ttk.LabelFrame(parent, text="Gaussian Noise")
+        noise_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Checkbutton(
+            noise_frame,
+            text="Enable Gaussian Noise",
+            variable=self.config["noise_enabled"],
+        ).grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=5, pady=5)
+
+        ttk.Label(noise_frame, text="Probability:").grid(
+            row=1, column=0, sticky=tk.W, padx=5, pady=5
+        )
+        ttk.Scale(
+            noise_frame,
+            from_=0.0,
+            to=1.0,
+            variable=self.config["noise_prob"],
+            orient=tk.HORIZONTAL,
+        ).grid(row=1, column=1, sticky=tk.EW, padx=5, pady=5)
+        self._add_prob_label(noise_frame, self.config["noise_prob"], 1)
+
+    def _add_prob_label(
+        self, parent: tk.Widget, var: tk.DoubleVar, row: int
+    ) -> None:
+        """Add a label showing probability percentage.
+
+        Args:
+            parent: Parent widget.
+            var: The DoubleVar to display.
+            row: Grid row.
+        """
+        label = tk.Label(parent, text="", width=5, anchor=tk.W)
+        label.grid(row=row, column=2, padx=5, pady=5)
+
+        def update_label(*_: object) -> None:
+            label.config(text=f"{var.get() * 100:.0f}%")
+
+        var.trace_add("write", update_label)
+        update_label()
+
+    def _add_pct_label(
+        self, parent: tk.Widget, var: tk.DoubleVar, row: int
+    ) -> None:
+        """Add a label showing percentage value.
+
+        Args:
+            parent: Parent widget.
+            var: The DoubleVar to display.
+            row: Grid row.
+        """
+        label = tk.Label(parent, text="", width=5, anchor=tk.W)
+        label.grid(row=row, column=2, padx=5, pady=5)
+
+        def update_label(*_: object) -> None:
+            label.config(text=f"{var.get() * 100:.0f}%")
+
+        var.trace_add("write", update_label)
+        update_label()
 
     def get_config(self) -> dict:
         """Get current configuration values.
@@ -141,10 +311,42 @@ class AugmentationConfigComponent(ttk.Frame):
         Returns:
             Dictionary with current configuration.
         """
-        # TODO: Extract actual values from widgets
-        return {}
+        return {
+            "rotate_enabled": self.config["rotate_enabled"].get(),
+            "rotate_limit": self.config["rotate_limit"].get(),
+            "rotate_prob": self.config["rotate_prob"].get(),
+            "h_flip_enabled": self.config["h_flip_enabled"].get(),
+            "h_flip_prob": self.config["h_flip_prob"].get(),
+            "brightness_enabled": self.config["brightness_enabled"].get(),
+            "brightness_limit": self.config["brightness_limit"].get(),
+            "contrast_limit": self.config["contrast_limit"].get(),
+            "brightness_prob": self.config["brightness_prob"].get(),
+            "blur_enabled": self.config["blur_enabled"].get(),
+            "blur_prob": self.config["blur_prob"].get(),
+            "noise_enabled": self.config["noise_enabled"].get(),
+            "noise_prob": self.config["noise_prob"].get(),
+            "n_copies": self.config["n_copies"].get(),
+            "view_mode": self.config["view_mode"].get(),
+        }
 
     def reset_to_defaults(self) -> None:
         """Reset all parameters to default values."""
-        # TODO: Reset all config variables to defaults
-        pass
+        defaults = {
+            "rotate_enabled": True,
+            "rotate_limit": 20,
+            "rotate_prob": 0.7,
+            "h_flip_enabled": True,
+            "h_flip_prob": 0.5,
+            "brightness_enabled": True,
+            "brightness_limit": 0.2,
+            "contrast_limit": 0.2,
+            "brightness_prob": 0.6,
+            "blur_enabled": True,
+            "blur_prob": 0.3,
+            "noise_enabled": True,
+            "noise_prob": 0.3,
+            "n_copies": 5,
+            "view_mode": "both",
+        }
+        for key, value in defaults.items():
+            self.config[key].set(value)
