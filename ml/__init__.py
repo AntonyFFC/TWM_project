@@ -1,1 +1,1 @@
-"""Machine learning methods (transfer learning, CNN features + tabular ML)."""
+"""Modele ML: ResNet18 (transfer learning)."""

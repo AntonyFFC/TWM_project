@@ -1,13 +1,11 @@
-"""Fine-tuning of pretrained ImageNet backbones for cap classification.
+"""ResNet18 fine-tuning na klasyfikacji nakretek.
 
-Supported backbones:
-    - resnet18     (default, good speed/quality tradeoff)
-    - mobilenet_v2 (smaller, faster on CPU)
+Strategia:
+    - bierzemy ResNet18 wytrenowany na ImageNet,
+    - zamrazamy wszystkie warstwy oprocz ostatniego bloku (layer4) + glowy klasyfikatora,
+    - trenujemy Adam + CrossEntropy przez kilka epok.
 
-Training:
-    - last block + classifier head are trained, earlier layers frozen.
-    - Simple Adam + CrossEntropy, with a mini val loop.
-    - Saves weights as a ``.pt`` file (state dict + meta).
+Wagi zapisujemy jako ``.pt`` (state_dict + meta).
 """
 from __future__ import annotations
 
@@ -44,7 +42,7 @@ class TrainHistory:
 
 
 class _ArrayDataset(Dataset):
-    """Wrap BGR uint8 (N, H, W, 3) arrays + labels into a torch Dataset."""
+    """Owijamy BGR uint8 (N, H, W, 3) + etykiety w torchowy Dataset."""
 
     def __init__(self, X: np.ndarray, y: np.ndarray, input_size: int) -> None:
         self.X = X
@@ -69,48 +67,31 @@ class _ArrayDataset(Dataset):
         return tensor, label
 
 
-def _build_backbone(name: str, num_classes: int) -> tuple[nn.Module, list[nn.Module]]:
-    """Build a backbone + return the list of parameter groups to train."""
-    name = name.lower()
-    if name == "resnet18":
-        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        for p in model.parameters():
-            p.requires_grad = False
-        # Fine-tune the last residual block + classifier.
-        for p in model.layer4.parameters():
-            p.requires_grad = True
-        in_features = model.fc.in_features
-        model.fc = nn.Linear(in_features, num_classes)
-        trainable_groups = [model.layer4, model.fc]
-    elif name == "mobilenet_v2":
-        model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
-        for p in model.parameters():
-            p.requires_grad = False
-        # Fine-tune last 2 inverted residual blocks + classifier.
-        for block in model.features[-2:]:
-            for p in block.parameters():
-                p.requires_grad = True
-        in_features = model.classifier[-1].in_features
-        model.classifier[-1] = nn.Linear(in_features, num_classes)
-        trainable_groups = [model.features[-2:], model.classifier]
-    else:
-        raise ValueError(f"Unknown backbone: {name}")
-    return model, trainable_groups
+def _build_resnet18(num_classes: int) -> nn.Module:
+    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    for p in model.parameters():
+        p.requires_grad = False
+    # Odmrazamy ostatni blok rezydualny - to wystarczy na maly dataset.
+    for p in model.layer4.parameters():
+        p.requires_grad = True
+    in_features = model.fc.in_features
+    model.fc = nn.Linear(in_features, num_classes)
+    return model
 
 
 class TransferLearningModel(BaseModel):
-    """Fine-tune an ImageNet backbone on cap crops."""
+    """Fine-tuning ResNet18 na cropach nakretek."""
+
+    name = "resnet18"
 
     def __init__(
         self,
-        backbone: str = "resnet18",
         epochs: int = CNN_EPOCHS,
         lr: float = CNN_LR,
         batch_size: int = BATCH_SIZE,
         input_size: int = CNN_INPUT_SIZE,
         device: str | None = None,
     ) -> None:
-        self.backbone = backbone
         self.epochs = epochs
         self.lr = lr
         self.batch_size = batch_size
@@ -118,10 +99,6 @@ class TransferLearningModel(BaseModel):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model: nn.Module | None = None
         self.history: TrainHistory | None = None
-
-    @property
-    def name(self) -> str:
-        return f"transfer_{self.backbone}"
 
     def fit(
         self,
@@ -132,8 +109,7 @@ class TransferLearningModel(BaseModel):
     ) -> None:
         torch.manual_seed(SEED)
         np.random.seed(SEED)
-        self.model, _ = _build_backbone(self.backbone, NUM_CLASSES)
-        self.model.to(self.device)
+        self.model = _build_resnet18(NUM_CLASSES).to(self.device)
 
         train_ds = _ArrayDataset(X_train, y_train, self.input_size)
         train_loader = DataLoader(
@@ -203,7 +179,7 @@ class TransferLearningModel(BaseModel):
 
     @torch.no_grad()
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        assert self.model is not None, "Call fit() before predict_proba()."
+        assert self.model is not None, "Wywolaj fit() przed predict_proba()."
         self.model.eval()
         ds = _ArrayDataset(X, np.zeros(len(X), dtype=np.int64), self.input_size)
         loader = DataLoader(ds, batch_size=self.batch_size, num_workers=NUM_WORKERS)
@@ -218,7 +194,6 @@ class TransferLearningModel(BaseModel):
         assert self.model is not None
         torch.save(
             {
-                "backbone": self.backbone,
                 "state_dict": self.model.state_dict(),
                 "input_size": self.input_size,
             },
@@ -227,8 +202,7 @@ class TransferLearningModel(BaseModel):
 
     def load(self, path: str) -> None:
         blob = torch.load(path, map_location=self.device)
-        self.backbone = blob["backbone"]
         self.input_size = blob.get("input_size", CNN_INPUT_SIZE)
-        self.model, _ = _build_backbone(self.backbone, NUM_CLASSES)
+        self.model = _build_resnet18(NUM_CLASSES)
         self.model.load_state_dict(blob["state_dict"])
         self.model.to(self.device)
