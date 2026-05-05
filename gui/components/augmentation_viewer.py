@@ -1,4 +1,3 @@
-"""Component for viewing augmentation results."""
 from __future__ import annotations
 
 import tkinter as tk
@@ -18,29 +17,14 @@ try:
 except ImportError:
     raise ImportError("Please install Pillow to display images: pip install Pillow")
 
-matplotlib.use("Agg")  # Use non-interactive backend for image generation
+matplotlib.use("Agg")
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 
 class AugmentationViewerComponent(ttk.Frame):
-    """Frame for displaying and saving augmentation visualizations.
-
-    Features:
-      - Display generated augmentation visualizations
-      - Select output format and location
-      - Generate visualizations using configured parameters
-      - Save results to disk
-    """
 
     def __init__(self, parent: ttk.Frame, data_loader: Any, config_component: Any) -> None:
-        """Initialize the augmentation viewer component.
-
-        Args:
-            parent: The parent frame.
-            data_loader: The data loader component.
-            config_component: The augmentation config component.
-        """
         super().__init__(parent)
 
         self.data_loader = data_loader
@@ -51,34 +35,28 @@ class AugmentationViewerComponent(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self) -> None:
-        """Create the component UI widgets."""
-        # Title
         title = tk.Label(
             self, text="Augmentation Viewer", font=("Arial", 14, "bold")
         )
         title.pack(pady=10)
 
-        # Control frame
         control_frame = ttk.LabelFrame(
             self, text="Visualization Controls"
         )
         control_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        # Generate button
         ttk.Button(
             control_frame,
             text="Generate Visualization",
             command=self._generate_visualization,
         ).pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Save button
         ttk.Button(
             control_frame,
             text="Choose Save Location",
             command=self._choose_save_location,
         ).pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Output path display
         path_frame = ttk.Frame(control_frame)
         path_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -90,11 +68,9 @@ class AugmentationViewerComponent(ttk.Frame):
         )
         self.path_label.pack(side=tk.LEFT, padx=5)
 
-        # Visualization display area
         display_frame = ttk.LabelFrame(self, text="Visualization Preview")
         display_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Canvas for image display (placeholder)
         self.canvas = tk.Canvas(
             display_frame, bg="gray", height=400
         )
@@ -108,7 +84,6 @@ class AugmentationViewerComponent(ttk.Frame):
             font=("Arial", 12),
         )
 
-        # Status frame
         status_frame = ttk.LabelFrame(self, text="Status")
         status_frame.pack(fill=tk.X, padx=10, pady=5)
 
@@ -118,7 +93,6 @@ class AugmentationViewerComponent(ttk.Frame):
         self.status_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
     def _generate_visualization(self) -> None:
-        """Generate the augmentation visualization."""
         if not self.data_loader or not self.config_component:
             self._update_status("Error: Data loader or config component not available.")
             return
@@ -176,19 +150,14 @@ class AugmentationViewerComponent(ttk.Frame):
             self.canvas.coords("placeholder", event.width // 2, event.height // 2)
     
     def _create_visualization(self, image_path: str, config: dict) -> PILImage.Image:
-        """Apply augmentations and plot them to a PIL image using an in-memory buffer."""
-        # 1. Load image
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError(f"Failed to load image at {image_path}")
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # 2. Extract core view settings
         mode = config.get("view_mode", "both")
         n_copies = config.get("n_copies", 5)
 
-        # 3. Build dynamic transforms list using factories to avoid cloning issues
-        # We store tuples of (Name, TransformFactoryLambda, ConfiguredProbability)
         transforms_info = []
 
         if config.get("rotate_enabled", True):
@@ -196,7 +165,7 @@ class AugmentationViewerComponent(ttk.Frame):
             limit = config.get("rotate_limit", 20)
             transforms_info.append((
                 f"Rotate (±{limit}°)", 
-                lambda prob: A.Rotate(limit=limit, border_mode=cv2.BORDER_REFLECT_101, p=prob),
+                lambda prob, l=limit: A.Rotate(limit=l, border_mode=cv2.BORDER_REFLECT_101, p=prob),
                 p
             ))
 
@@ -213,54 +182,61 @@ class AugmentationViewerComponent(ttk.Frame):
             b_limit = config.get("brightness_limit", 0.2)
             c_limit = config.get("contrast_limit", 0.2)
             transforms_info.append((
-                "Brightness / Contrast", 
-                lambda prob: A.RandomBrightnessContrast(brightness_limit=b_limit, contrast_limit=c_limit, p=prob),
+                "Bright / Contrast", 
+                lambda prob, bl=b_limit, cl=c_limit: A.RandomBrightnessContrast(brightness_limit=bl, contrast_limit=cl, p=prob),
                 p
             ))
 
         if config.get("blur_enabled", True):
             p = config.get("blur_prob", 0.3)
+            b_limit = config.get("blur_limit", 5)
+            b_limit = max(3, b_limit if b_limit % 2 != 0 else b_limit + 1)
             transforms_info.append((
-                "Gaussian Blur", 
-                lambda prob: A.GaussianBlur(blur_limit=(3, 5), p=prob),
+                f"Gauss Blur (k={b_limit})", 
+                lambda prob, bl=b_limit: A.GaussianBlur(blur_limit=(3, bl), p=prob),
+                p
+            ))
+
+        if config.get("m_blur_enabled", True):
+            p = config.get("m_blur_prob", 0.3)
+            mb_limit = config.get("m_blur_limit", 5)
+            mb_limit = max(3, mb_limit if mb_limit % 2 != 0 else mb_limit + 1)
+            transforms_info.append((
+                f"Motion Blur (k={mb_limit})", 
+                lambda prob, mbl=mb_limit: A.MotionBlur(blur_limit=(3, mbl), p=prob),
                 p
             ))
 
         if config.get("noise_enabled", True):
             p = config.get("noise_prob", 0.3)
+            n_std = config.get("noise_std", 0.1)
             transforms_info.append((
-                "Gaussian Noise", 
-                lambda prob: A.GaussNoise(std_range=(0.02, 0.1), p=prob), # FIXED var_limit
+                f"Gauss Noise (s={n_std:.2f})", 
+                lambda prob, std=n_std: A.GaussNoise(std_range=(0.0, std), p=prob), 
                 p
             ))
 
-        # 4. Determine figure layout based on 'view_mode'
         rows = 2 if mode == "both" else 1
         fig = plt.figure(figsize=(15, 4 * rows))
         
         gs = fig.add_gridspec(rows, 1)
         current_row_idx = 0
         
-        # Helper to format the axes
         def format_ax(ax, image, title):
             ax.imshow(image)
             ax.set_title(title, fontsize=10, fontweight="bold" if "Original" in title else "normal")
             ax.axis("off")
 
-        # --- INDIVIDUAL MODE ---
         if mode in ("individual", "both"):
             cols = len(transforms_info) + 1
             gs_row = gs[current_row_idx].subgridspec(1, cols)
             
-            # Original
             ax = fig.add_subplot(gs_row[0, 0])
             format_ax(ax, img_rgb, "Original")
             
-            # Transforms
             for i, (name, transform_factory, _) in enumerate(transforms_info, 1):
                 ax = fig.add_subplot(gs_row[0, i])
                 try:
-                    # Generate transform with p=1.0 strictly for the individual preview
                     transform = transform_factory(1.0)
                     augmented = transform(image=img_rgb)["image"]
                     format_ax(ax, augmented, name)
@@ -270,20 +246,16 @@ class AugmentationViewerComponent(ttk.Frame):
             
             current_row_idx += 1
 
-        # --- COPIES MODE ---
         if mode in ("copies", "both"):
-            # Rebuild pipeline using the actual configured probabilities
             pipeline_transforms = [factory(prob) for _, factory, prob in transforms_info]
             pipeline = A.Compose(pipeline_transforms)
             
             cols = n_copies + 1
             gs_row = gs[current_row_idx].subgridspec(1, cols)
             
-            # Original
             ax = fig.add_subplot(gs_row[0, 0])
             format_ax(ax, img_rgb, "Original")
             
-            # Copies
             for i in range(1, cols):
                 ax = fig.add_subplot(gs_row[0, i])
                 try:
@@ -295,17 +267,14 @@ class AugmentationViewerComponent(ttk.Frame):
 
         plt.tight_layout()
 
-        # 5. Save Matplotlib figure to an in-memory buffer
         buf = io.BytesIO()
         plt.savefig(buf, format="png", dpi=100, bbox_inches="tight", facecolor='#2b2b2b')
-        plt.close(fig) # Free memory to prevent memory leaks
+        plt.close(fig)
         buf.seek(0)
 
-        # 6. Convert buffer to PIL Image safely using our alias
         return PILImage.open(buf)
 
     def _choose_save_location(self) -> None:
-        """Choose where to save the visualization."""
         path = filedialog.asksaveasfilename(
             defaultextension=".png",
             filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
@@ -318,11 +287,6 @@ class AugmentationViewerComponent(ttk.Frame):
             self._update_status(f"Output path set to: {path}")
 
     def _update_status(self, message: str) -> None:
-        """Update the status text.
-
-        Args:
-            message: The message to display.
-        """
         self.status_text.config(state=tk.NORMAL)
         self.status_text.insert(tk.END, f"{message}\n")
         self.status_text.see(tk.END)

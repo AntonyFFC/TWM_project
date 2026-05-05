@@ -1,4 +1,3 @@
-"""Component for loading and selecting image data."""
 from __future__ import annotations
 
 import tkinter as tk
@@ -15,26 +14,12 @@ from config import CROPS_DIR, RAW_IMAGES_DIR  # noqa: E402
 
 
 class DataLoaderComponent(ttk.Frame):
-    """Frame for selecting image data sources.
-
-    Features:
-      - Browse and select from raw images
-      - Browse and select from processed crops
-      - Show image preview
-      - Display image metadata (size, path, etc.)
-    """
 
     def __init__(
         self,
         parent: ttk.Frame,
         on_status: Callable[[str], None] | None = None,
     ) -> None:
-        """Initialize the data loader component.
-
-        Args:
-            parent: The parent frame.
-            on_status: Optional callback for status bar updates.
-        """
         super().__init__(parent)
         self.selected_image_path: Path | None = None
         self.selected_source: str = "Unknown"
@@ -44,18 +29,14 @@ class DataLoaderComponent(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self) -> None:
-        """Create the component UI widgets."""
-        # Title
         title = tk.Label(
             self, text="Data Loader", font=("Arial", 14, "bold")
         )
         title.pack(pady=10)
 
-        # Source selection frame
         source_frame = ttk.LabelFrame(self, text="Select Image Source")
         source_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        # Buttons for different sources
         ttk.Button(
             source_frame,
             text="Browse Raw Images",
@@ -68,11 +49,9 @@ class DataLoaderComponent(ttk.Frame):
             command=self._browse_crops,
         ).pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Side-by-side content: metadata on left, preview on right.
         content_pane = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         content_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # Selected image info frame (left pane)
         info_frame = ttk.LabelFrame(content_pane, text="Selected Image Info")
         info_container = ttk.Frame(info_frame)
         info_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -90,7 +69,6 @@ class DataLoaderComponent(ttk.Frame):
         self.info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         info_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Preview frame (right pane)
         preview_frame = ttk.LabelFrame(content_pane, text="Image Preview")
 
         self.preview_label = tk.Label(
@@ -106,26 +84,18 @@ class DataLoaderComponent(ttk.Frame):
         content_pane.add(preview_frame, weight=2)
 
     def _browse_raw_images(self) -> None:
-        """Browse and select a raw image."""
         self._browse_image(
             initial_dir=RAW_IMAGES_DIR,
             source_label="Raw Images",
         )
 
     def _browse_crops(self) -> None:
-        """Browse and select a processed crop."""
         self._browse_image(
             initial_dir=CROPS_DIR,
             source_label="Processed Crops",
         )
 
     def _browse_image(self, initial_dir: Path, source_label: str) -> None:
-        """Browse for an image file and update selection/preview.
-
-        Args:
-            initial_dir: Suggested directory to open first.
-            source_label: Human-readable source name for metadata.
-        """
         if not initial_dir.exists():
             self._notify_status(
                 f"Directory not found: {initial_dir}. Falling back to project root."
@@ -151,7 +121,6 @@ class DataLoaderComponent(ttk.Frame):
         self._notify_status(f"Loaded image: {self.selected_image_path.name}")
 
     def _update_info_display(self) -> None:
-        """Update the info text display with selected image details."""
         self.info_text.config(state=tk.NORMAL)
         self.info_text.delete("1.0", tk.END)
 
@@ -185,7 +154,6 @@ class DataLoaderComponent(ttk.Frame):
         self.info_text.config(state=tk.DISABLED)
 
     def _update_preview_display(self) -> None:
-        """Render the selected image in the preview panel."""
         if self.selected_image_path is None:
             return
 
@@ -210,10 +178,8 @@ class DataLoaderComponent(ttk.Frame):
         )
 
     def _notify_status(self, message: str) -> None:
-        """Send a status update to the optional parent callback."""
         if self.on_status:
             self.on_status(message)
 
     def get_selected_image_path(self) -> Path | None:
-        """Return currently selected image path, if any."""
         return self.selected_image_path
