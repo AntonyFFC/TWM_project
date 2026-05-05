@@ -84,7 +84,6 @@ def make_grid(
     Xs = X_test[selected]
     ys = y_test[selected]
 
-    print(f"Wybralem {len(Xs)} probek, biegne predykcje...")
     proba_c = classical.predict_proba(Xs)
     proba_m = ml.predict_proba(Xs)
     pred_c = proba_c.argmax(axis=1)
@@ -96,15 +95,21 @@ def make_grid(
     n_cols = min(5, n)
     n_rows = int(np.ceil(n / n_cols))
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.0 * n_cols, 3.6 * n_rows))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(3.4 * n_cols, 5.0 * n_rows + 0.6),
+        gridspec_kw={"hspace": 0.75, "wspace": 0.18},
+    )
     axes = np.atleast_2d(axes)
 
     fig.suptitle(
         f"Demo: {classical_run}  vs  {ml_run}\n"
         f"acc(classical)={classical_meta['final_metrics']['accuracy']:.2f}  |  "
         f"acc(ml)={ml_meta['final_metrics']['accuracy']:.2f}",
-        fontsize=13,
+        fontsize=14,
         fontweight="bold",
+        y=0.98,
     )
 
     for i, ax in enumerate(axes.flat):
@@ -123,32 +128,33 @@ def make_grid(
         c_ok = pred_c[i] == ys[i]
         m_ok = pred_m[i] == ys[i]
 
-        title = f"GT: {gt_name}"
-        ax.set_title(title, fontsize=10, fontweight="bold")
+        ax.set_title(f"GT: {gt_name}", fontsize=11, fontweight="bold", pad=6)
 
-        # Etykiety pod obrazem ze stylem tick/cross.
+        # Etykiety pod obrazem - zarezerwowane miejsce dzieki hspace=0.85.
         ax.text(
-            0.02,
-            -0.02,
-            f"HOG+SVM: {_short(c_name)}  ({conf_c[i]:.2f}) {'✓' if c_ok else '✗'}",
+            0.5,
+            -0.06,
+            f"HOG+SVM: {_short(c_name)}  ({conf_c[i]:.2f}) {'OK' if c_ok else 'X'}",
             transform=ax.transAxes,
-            fontsize=9,
+            fontsize=10,
             color=_green_red(c_ok),
-            verticalalignment="top",
+            ha="center",
+            va="top",
         )
         ax.text(
-            0.02,
-            -0.14,
-            f"ResNet18: {_short(m_name)}  ({conf_m[i]:.2f}) {'✓' if m_ok else '✗'}",
+            0.5,
+            -0.18,
+            f"ResNet18: {_short(m_name)}  ({conf_m[i]:.2f}) {'OK' if m_ok else 'X'}",
             transform=ax.transAxes,
-            fontsize=9,
+            fontsize=10,
             color=_green_red(m_ok),
-            verticalalignment="top",
+            ha="center",
+            va="top",
         )
 
-    plt.tight_layout(rect=(0, 0.03, 1, 0.95))
+    plt.subplots_adjust(top=0.90, bottom=0.08, left=0.02, right=0.98)
     out = PLOTS_DIR / "demo_predictions.png"
-    plt.savefig(out, dpi=140, bbox_inches="tight")
+    plt.savefig(out, dpi=140)
     plt.close(fig)
 
     n_correct_c = int((pred_c == ys).sum())
