@@ -1,1 +1,1 @@
-"""Classical image processing methods (OpenCV-based)."""
+"""Klasyczne metody przetwarzania obrazow: HOG + SVM."""

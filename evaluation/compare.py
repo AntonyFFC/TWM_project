@@ -1,13 +1,13 @@
-"""Aggregate per-method reports into a single summary table + comparison plots.
+"""Zbiera wyniki wszystkich runow w tabele i wykresy porownawcze.
 
-Reads all ``results/metrics/*.json`` (skipping ``*_robustness.json`` -- those
-are loaded separately) and produces:
+Czyta wszystko z ``results/metrics/*.json`` (pomijajac ``*_robustness.json``)
+i produkuje:
 
 - ``results/metrics/summary.csv``
-- ``results/plots/comparison_accuracy.png``  (paired raw vs aug)
+- ``results/plots/comparison_accuracy.png`` (paired raw vs aug)
 - ``results/plots/comparison_speed.png``
 - ``results/plots/robustness.png``
-- ``results/plots/augmentation_gain.png``    (delta aug - raw per metric)
+- ``results/plots/augmentation_gain.png``
 """
 from __future__ import annotations
 
@@ -18,13 +18,12 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from config import METRICS_DIR, PLOTS_DIR, ensure_dirs  # noqa: E402
 
-import matplotlib.pyplot as plt  # noqa: E402 - config sets MPLBACKEND=Agg
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 
 def _load_reports() -> tuple[pd.DataFrame, dict[str, dict]]:
-    """Return (summary_df, {run_name: robustness_dict})."""
     ensure_dirs()
     rows = []
     robustness_map: dict[str, dict] = {}
@@ -62,8 +61,8 @@ def _load_reports() -> tuple[pd.DataFrame, dict[str, dict]]:
     return df, robustness_map
 
 
-def _order_base_methods(df: pd.DataFrame) -> list[str]:
-    """Keep base-method order stable: classical first, then ML, both alphabetical."""
+def _ordered_methods(df: pd.DataFrame) -> list[str]:
+    """Klasyczne najpierw, potem ML, w kazdej grupie alfabetycznie."""
     order = []
     for kind in ("classical", "ml"):
         subset = df.loc[df["kind"] == kind, "base_method"].drop_duplicates()
@@ -72,12 +71,9 @@ def _order_base_methods(df: pd.DataFrame) -> list[str]:
 
 
 def plot_accuracy_comparison(df: pd.DataFrame) -> Path:
-    """Grouped bar chart: for each base method, show raw-vs-aug Accuracy and F1."""
-    base_methods = _order_base_methods(df)
-    x = np.arange(len(base_methods))
-
-    fig, (ax_acc, ax_f1) = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-
+    methods = _ordered_methods(df)
+    x = np.arange(len(methods))
+    fig, (ax_acc, ax_f1) = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
     width = 0.35
     for ax, metric, title in (
         (ax_acc, "accuracy", "Accuracy"),
@@ -85,22 +81,28 @@ def plot_accuracy_comparison(df: pd.DataFrame) -> Path:
     ):
         raw_vals = []
         aug_vals = []
-        for bm in base_methods:
+        for bm in methods:
             row_raw = df[(df["base_method"] == bm) & (df["trained_on"] == "raw")]
             row_aug = df[(df["base_method"] == bm) & (df["trained_on"] == "aug")]
             raw_vals.append(row_raw[metric].mean() if not row_raw.empty else np.nan)
             aug_vals.append(row_aug[metric].mean() if not row_aug.empty else np.nan)
 
-        ax.bar(x - width / 2, raw_vals, width, label="raw")
-        ax.bar(x + width / 2, aug_vals, width, label="aug")
+        ax.bar(x - width / 2, raw_vals, width, label="raw", color="#5c8ec9")
+        ax.bar(x + width / 2, aug_vals, width, label="aug", color="#e08a3c")
         ax.set_xticks(x)
-        ax.set_xticklabels(base_methods, rotation=30, ha="right")
+        ax.set_xticklabels(methods, rotation=15, ha="right")
         ax.set_ylim(0, 1.05)
         ax.set_title(title)
         ax.grid(axis="y", alpha=0.3)
         ax.legend()
+        for xi, val in zip(x - width / 2, raw_vals):
+            if not np.isnan(val):
+                ax.text(xi, val + 0.01, f"{val:.2f}", ha="center", fontsize=8)
+        for xi, val in zip(x + width / 2, aug_vals):
+            if not np.isnan(val):
+                ax.text(xi, val + 0.01, f"{val:.2f}", ha="center", fontsize=8)
 
-    fig.suptitle("Method comparison: raw vs augmented training")
+    fig.suptitle("Porownanie metod: raw vs augmented training")
     plt.tight_layout()
     out = PLOTS_DIR / "comparison_accuracy.png"
     plt.savefig(out, dpi=140)
@@ -109,19 +111,18 @@ def plot_accuracy_comparison(df: pd.DataFrame) -> Path:
 
 
 def plot_speed_comparison(df: pd.DataFrame) -> Path:
-    """Inference time is independent of raw/aug -> average over both."""
     speed = (
         df.groupby("base_method")["inference_ms"].mean().sort_values().reset_index()
     )
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
     x = np.arange(len(speed))
-    ax.bar(x, speed["inference_ms"])
+    ax.bar(x, speed["inference_ms"], color="#4e9a73")
     ax.set_xticks(x)
-    ax.set_xticklabels(speed["base_method"], rotation=30, ha="right")
-    ax.set_ylabel("ms / image")
-    ax.set_title("Method comparison: inference time")
+    ax.set_xticklabels(speed["base_method"], rotation=0)
+    ax.set_ylabel("ms / obraz")
+    ax.set_title("Czas inferencji (srednia raw + aug)")
     for xi, val in zip(x, speed["inference_ms"]):
-        ax.text(xi, val, f"{val:.2f}", ha="center", va="bottom", fontsize=8)
+        ax.text(xi, val, f"{val:.2f}", ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     out = PLOTS_DIR / "comparison_speed.png"
     plt.savefig(out, dpi=140)
@@ -130,11 +131,10 @@ def plot_speed_comparison(df: pd.DataFrame) -> Path:
 
 
 def plot_augmentation_gain(df: pd.DataFrame) -> Path | None:
-    """Show Δ (aug - raw) per metric, per base method."""
-    base_methods = _order_base_methods(df)
+    methods = _ordered_methods(df)
     deltas = {"accuracy": [], "f1_macro": []}
     kept = []
-    for bm in base_methods:
+    for bm in methods:
         r_raw = df[(df["base_method"] == bm) & (df["trained_on"] == "raw")]
         r_aug = df[(df["base_method"] == bm) & (df["trained_on"] == "aug")]
         if r_raw.empty or r_aug.empty:
@@ -146,16 +146,16 @@ def plot_augmentation_gain(df: pd.DataFrame) -> Path | None:
     if not kept:
         return None
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
     x = np.arange(len(kept))
     width = 0.35
-    ax.bar(x - width / 2, deltas["accuracy"], width, label="Δ Accuracy")
-    ax.bar(x + width / 2, deltas["f1_macro"], width, label="Δ F1 macro")
+    ax.bar(x - width / 2, deltas["accuracy"], width, label="Δ Accuracy", color="#5c8ec9")
+    ax.bar(x + width / 2, deltas["f1_macro"], width, label="Δ F1 macro", color="#e08a3c")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xticks(x)
-    ax.set_xticklabels(kept, rotation=30, ha="right")
+    ax.set_xticklabels(kept, rotation=0)
     ax.set_ylabel("aug - raw")
-    ax.set_title("Effect of training-time augmentation per method")
+    ax.set_title("Efekt augmentacji per metoda")
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
@@ -174,7 +174,7 @@ def plot_robustness(robustness_map: dict[str, dict]) -> Path | None:
             if k not in all_corruptions:
                 all_corruptions.append(k)
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(11, 6))
     x = np.arange(len(all_corruptions))
     n_methods = len(robustness_map)
     bar_w = 0.8 / max(1, n_methods)
@@ -185,11 +185,11 @@ def plot_robustness(robustness_map: dict[str, dict]) -> Path | None:
         ax.bar(x + offset, values, bar_w, label=method)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(all_corruptions, rotation=30, ha="right")
+    ax.set_xticklabels(all_corruptions, rotation=20, ha="right")
     ax.set_ylabel("accuracy")
     ax.set_ylim(0, 1.05)
-    ax.set_title("Robustness benchmark (accuracy under corruptions)")
-    ax.legend(fontsize=7, ncol=2)
+    ax.set_title("Odpornosc: accuracy pod zaburzeniami obrazu")
+    ax.legend(fontsize=8, ncol=2)
     ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     out = PLOTS_DIR / "robustness.png"
@@ -201,27 +201,26 @@ def plot_robustness(robustness_map: dict[str, dict]) -> Path | None:
 def main() -> None:
     df, robustness_map = _load_reports()
     if df.empty:
-        print("No method reports found in results/metrics/.")
-        print("Run `python run_all.py` or the individual run_* scripts first.")
+        print("Brak raportow w results/metrics/. Odpal najpierw `python run_all.py`.")
         return
 
     csv_path = METRICS_DIR / "summary.csv"
     df.to_csv(csv_path, index=False)
-    print(f"Wrote {csv_path}")
+    print(f"Zapisano {csv_path}")
 
-    print("\n=== Summary table ===")
+    print("\n=== Tabela podsumowujaca ===")
     print(df.to_string(index=False))
 
     acc_plot = plot_accuracy_comparison(df)
-    print(f"Wrote {acc_plot}")
+    print(f"Zapisano {acc_plot}")
     speed_plot = plot_speed_comparison(df)
-    print(f"Wrote {speed_plot}")
+    print(f"Zapisano {speed_plot}")
     gain_plot = plot_augmentation_gain(df)
     if gain_plot is not None:
-        print(f"Wrote {gain_plot}")
+        print(f"Zapisano {gain_plot}")
     rob_plot = plot_robustness(robustness_map)
     if rob_plot is not None:
-        print(f"Wrote {rob_plot}")
+        print(f"Zapisano {rob_plot}")
 
 
 if __name__ == "__main__":

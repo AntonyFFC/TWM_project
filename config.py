@@ -1,20 +1,18 @@
-"""Global configuration: paths, seed, class names, training hyperparameters.
+"""Globalna konfiguracja: sciezki, seed, klasy, hiperparametry treningu.
 
-Edit this file to change dataset location, image size, batch size, etc.
-Every module reads from here so paths are consistent across the project.
+Edytuj ten plik, jesli chcesz zmienic lokalizacje datasetu, rozmiar obrazow,
+batch size itd. Kazdy modul czyta stad sciezki, wiec sa spojne.
 """
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-# Force matplotlib to use the non-interactive Agg backend *before* anything
-# else in the project imports pyplot. Without this, the default TkAgg backend
-# on Windows crashes with "Tcl_AsyncDelete: async handler deleted by the wrong
-# thread" when sklearn or torch spawn worker threads that garbage-collect
-# figures. Setting MPLBACKEND is honoured by every subsequent matplotlib import.
+# Wymuszamy backend Agg na matplotlib zanim cokolwiek innego sciagnie pyplot.
+# Bez tego domyslny TkAgg na Windowsie potrafi crashnac z "Tcl_AsyncDelete..."
+# gdy sklearn/torch spawnuja watki, ktore garbage-collectuja figury.
 os.environ.setdefault("MPLBACKEND", "Agg")
-try:  # defensive: if matplotlib is already imported, switch the backend now
+try:
     import matplotlib  # noqa: E402
 
     matplotlib.use("Agg", force=True)
@@ -51,14 +49,13 @@ TRAIN_RATIO: float = 0.70
 VAL_RATIO: float = 0.15
 TEST_RATIO: float = 0.15
 
-# Uniform crop size (square) fed to every classifier. Chosen as a
-# compromise between HOG expressiveness and CNN input resolution.
+# Wspolny rozmiar crop-a wejsciowego (wycinka GT bbox).
 IMAGE_SIZE: int = 128
 
-# Expand GT bbox by this fraction on each side before cropping to keep a bit
-# of context (thread, ring) around the cap.
+# Ile kontekstu (gwint, pierscien) zostawic wokol GT bbox.
 BBOX_PADDING: float = 0.05
 
+# Hiperparametry treningu CNN.
 BATCH_SIZE: int = 32
 NUM_WORKERS: int = 0
 CNN_EPOCHS: int = 10
@@ -70,7 +67,7 @@ IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
 
 
 def ensure_dirs() -> None:
-    """Create all derived directories if they don't yet exist."""
+    """Stworz wszystkie katalogi pochodne, jesli jeszcze nie istnieja."""
     for p in (
         PROCESSED_DIR,
         CROPS_DIR,
