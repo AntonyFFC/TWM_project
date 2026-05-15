@@ -43,24 +43,20 @@ CLASS_NAMES: list[str] = [
 ]
 NUM_CLASSES: int = len(CLASS_NAMES)
 
-SEED: int = 42
+# BEGIN_GUI_EDITABLE
 
-TRAIN_RATIO: float = 0.70
+SEED: int = 42
+TRAIN_RATIO: float = 0.7
 VAL_RATIO: float = 0.15
 TEST_RATIO: float = 0.15
-
-# Wspolny rozmiar crop-a wejsciowego (wycinka GT bbox).
 IMAGE_SIZE: int = 128
-
-# Ile kontekstu (gwint, pierscien) zostawic wokol GT bbox.
 BBOX_PADDING: float = 0.05
-
-# Hiperparametry treningu CNN.
 BATCH_SIZE: int = 32
 NUM_WORKERS: int = 0
 CNN_EPOCHS: int = 10
-CNN_LR: float = 1e-3
+CNN_LR: float = 0.001
 CNN_INPUT_SIZE: int = 224
+# END_GUI_EDITABLE
 
 IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)

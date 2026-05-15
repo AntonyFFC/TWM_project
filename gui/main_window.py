@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from gui.components.data_loader import DataLoaderComponent  # noqa: E402
+from config import RESULTS_DIR  # noqa: E402
 from gui.components.augmentation_config import AugmentationConfigComponent  # noqa: E402
 from gui.components.augmentation_viewer import AugmentationViewerComponent  # noqa: E402
+from gui.components.data_loader import DataLoaderComponent  # noqa: E402
+from gui.components.export_results import ExportResultsComponent  # noqa: E402
+from gui.components.methods_panel import MethodsPanelComponent  # noqa: E402
+from gui.components.results_comparison import ResultsComparisonComponent  # noqa: E402
+from gui.components.training_pipeline import TrainingPipelineComponent  # noqa: E402
 
 
 class MainWindow:
@@ -18,14 +23,14 @@ class MainWindow:
     def __init__(self, root: tk.Tk) -> None:
 
         self.root = root
-        self.root.title("TWM Project - Bottle Cap Augmentation Viewer")
-        self.root.geometry("1200x800")
+        self.root.title("TWM Project - Bottle Cap Classification")
+        self.root.geometry("1280x860")
 
         self._create_menu_bar()
 
-        self._create_notebook()
-
         self._create_status_bar()
+
+        self._create_notebook()
 
     def _create_menu_bar(self) -> None:
         menubar = tk.Menu(self.root)
@@ -33,6 +38,8 @@ class MainWindow:
 
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Open results folder", command=self._open_results_folder)
+        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
 
         view_menu = tk.Menu(menubar, tearoff=0)
@@ -54,7 +61,7 @@ class MainWindow:
             on_status=self.update_status,
         )
         self.notebook.add(self.data_loader_tab, text="Data Loader")
-        
+
         self.augmentation_config_tab = AugmentationConfigComponent(
             self.notebook
         )
@@ -63,9 +70,34 @@ class MainWindow:
         self.augmentation_viewer_tab = AugmentationViewerComponent(
             self.notebook,
             data_loader=self.data_loader_tab,
-            config_component=self.augmentation_config_tab
+            config_component=self.augmentation_config_tab,
         )
         self.notebook.add(self.augmentation_viewer_tab, text="Augmentation Viewer")
+
+        self.pipeline_tab = TrainingPipelineComponent(
+            self.notebook,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.pipeline_tab, text="Training Pipeline")
+
+        self.methods_tab = MethodsPanelComponent(
+            self.notebook,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.methods_tab, text="Classical & ML")
+
+        self.compare_tab = ResultsComparisonComponent(
+            self.notebook,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.compare_tab, text="Results Comparison")
+
+        self.export_tab = ExportResultsComponent(
+            self.notebook,
+            data_loader=self.data_loader_tab,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.export_tab, text="Export")
 
     def _create_status_bar(self) -> None:
         self.status_bar = tk.Label(
@@ -79,21 +111,34 @@ class MainWindow:
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _reset_layout(self) -> None:
-        self.root.geometry("1200x800")
+        self.root.geometry("1280x860")
+
+    def _open_results_folder(self) -> None:
+        import os
+        import subprocess
+
+        path = str(RESULTS_DIR)
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(path)  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.run(["open", path], check=False)
+        else:
+            subprocess.run(["xdg-open", path], check=False)
+        self.update_status("Opened results folder")
 
     def _show_about(self) -> None:
-        from tkinter import messagebox
-
         messagebox.showinfo(
             "About",
-            "TWM Project - Bottle Cap Augmentation Viewer\n\n"
-            "A GUI application for visualizing and testing "
-            "image augmentation pipelines.",
+            "TWM Project - Bottle Cap Classification\n\n"
+            "GUI for data loading, augmentation, training pipeline,\n"
+            "classical and ML methods, results comparison, and export.",
         )
 
     def update_status(self, message: str) -> None:
-        self.status_bar.config(text=message)
-        self.root.update_idletasks()
+        if hasattr(self, "status_bar"):
+            self.status_bar.config(text=message)
+            self.root.update_idletasks()
 
 
 def main() -> None:
