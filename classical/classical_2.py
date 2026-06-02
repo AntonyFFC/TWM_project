@@ -191,6 +191,7 @@ class Classical2:
                         "area": area,
                         "rectangularity": rectangularity,
                         "angle_diff_deg": angle_diff,
+                        "contour": cnt,
                     })
 
                     if idx == 0:
@@ -235,7 +236,7 @@ class Classical2:
                 _, _, bw, bh = bottle_box
                 measurements["bottle_width"] = bw
                 top_y = bottle_box[1]
-                band_h = max(1, int(bh * 0.10))
+                band_h = max(1, int(bh * 0.15))
                 band = bottle_mask[top_y:top_y + band_h, bottle_box[0]:bottle_box[0] + bw]
                 max_contact = 0
                 contact_line = None
@@ -258,7 +259,7 @@ class Classical2:
                 else:
                     prop = 0.0
                 measurements["bottle_contact_prop"] = prop
-                if prop < 0.8:
+                if prop < 0.85:
                     status.append("cap_loose")
                 if diff > self.p["angle_thresh_deg"]:
                     status.append("cap_crooked")
@@ -284,7 +285,20 @@ class Classical2:
             if len(cap_regions) > 1:
                 ring_broken = True
             elif len(cap_regions) == 1:
-                box = cap_regions[0]["box"]
+                # Check convex hull area ratio for single cap zone
+                region = cap_regions[0]
+                cap_cnt = region.get("contour")
+                if cap_cnt is not None:
+                    cap_area = cv2.contourArea(cap_cnt)
+                    hull = cv2.convexHull(cap_cnt)
+                    hull_area = cv2.contourArea(hull)
+                    if hull_area > 0:
+                        area_ratio = cap_area / hull_area
+                        measurements["cap_area_ratio"] = area_ratio
+                        if area_ratio < 0.93:
+                            ring_broken = True
+                
+                box = region["box"]
                 sorted_pts = sorted(box.tolist(), key=lambda p: (p[1], p[0]))
                 top_pts = sorted_pts[:2]
                 bottom_pts = sorted_pts[2:]
