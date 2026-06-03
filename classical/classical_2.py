@@ -17,8 +17,8 @@ class Classical2:
         defaults = {
             # V-channel ranges for zone detection
             "bg_v_range": (0, 45),
-            "bottle_v_range": (46, 134),
-            "cap_v_range": (135, 255),
+            "bottle_v_range": (46, 129),
+            "cap_v_range": (130, 255),
             # morphology
             "erode_iter": 2,
             "dilate_iter": 1,
@@ -46,6 +46,14 @@ class Classical2:
         #mask = cv2.erode(mask, k, iterations=self.p["erode_iter"])
         mask = cv2.erode(mask, k, iterations=self.p["erode_iter"])
         mask = cv2.dilate(mask, k, iterations=self.p["dilate_iter"])
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
+        return mask
+
+    def _morph_clean3(self, mask: np.ndarray) -> np.ndarray:
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.p["kernel_size"],) * 2)
+        #mask = cv2.erode(mask, k, iterations=self.p["erode_iter"])
+        mask = cv2.erode(mask, k, iterations=self.p["erode_iter"])
+        #mask = cv2.dilate(mask, k, iterations=self.p["dilate_iter"])
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
         return mask
 
@@ -103,8 +111,15 @@ class Classical2:
         out = img.copy()
 
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         v = hsv[:, :, 2]
+        if int(v.max()) < 210:
+            v_norm = cv2.normalize(v, None, alpha=0, beta=210, norm_type=cv2.NORM_MINMAX)
+            hsv[:, :, 2] = v_norm
+            img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            v = hsv[:, :, 2]
+        else:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         # Masks using the V channel ranges: background, cap; bottle is derived later.
         bg_low, bg_high = self.p["bg_v_range"]
@@ -115,7 +130,7 @@ class Classical2:
         cap_mask = cv2.inRange(v, cap_low, cap_high)
 
         raw_bg_mask = self._morph_clean(raw_bg_mask)
-        cap_mask = self._morph_clean(cap_mask)
+        cap_mask = self._morph_clean3(cap_mask)
 
         bg_mask = np.zeros_like(raw_bg_mask)
         bg_contours, _ = cv2.findContours(raw_bg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -230,6 +245,8 @@ class Classical2:
             # loose cap if the upper bottle edge contacting the cap is too narrow
             measurements["bottle_contact_width"] = None
             measurements["bottle_width"] = None
+            measurements["bottle_upper_width"] = None
+            measurements["bottle_upper_width_line"] = None
             measurements["bottle_contact_prop"] = None
             measurements["bottle_contact_line"] = None
             if bottle_box is not None:
@@ -254,8 +271,24 @@ class Classical2:
                                 )
                 measurements["bottle_contact_width"] = max_contact
                 measurements["bottle_contact_line"] = contact_line
-                if bw > 0:
-                    prop = max_contact / float(bw)
+                upper_width = bw
+                upper_width_line = None
+                if bottle_box is not None:
+                    bx, by, bw, bh = bottle_box
+                    half_h = max(1, int(bh * 0.5))
+                    upper_mask = bottle_mask[by:by + half_h, bx:bx + bw]
+                    ys, xs = np.where(upper_mask > 0)
+                    if xs.size > 0:
+                        left_idx = int(np.argmin(xs))
+                        right_idx = int(np.argmax(xs))
+                        left_pt = (bx + int(xs[left_idx]), by + int(ys[left_idx]))
+                        right_pt = (bx + int(xs[right_idx]), by + int(ys[right_idx]))
+                        upper_width = float(np.linalg.norm(np.array(right_pt, dtype=float) - np.array(left_pt, dtype=float)))
+                        upper_width_line = (left_pt, right_pt)
+                measurements["bottle_upper_width"] = upper_width
+                measurements["bottle_upper_width_line"] = upper_width_line
+                if upper_width > 0:
+                    prop = max_contact / float(upper_width)
                 else:
                     prop = 0.0
                 measurements["bottle_contact_prop"] = prop
@@ -295,34 +328,56 @@ class Classical2:
                     if hull_area > 0:
                         area_ratio = cap_area / hull_area
                         measurements["cap_area_ratio"] = area_ratio
-                        if area_ratio < 0.93:
-                            ring_broken = True
-                
-                box = region["box"]
-                sorted_pts = sorted(box.tolist(), key=lambda p: (p[1], p[0]))
-                top_pts = sorted_pts[:2]
-                bottom_pts = sorted_pts[2:]
-                if len(top_pts) == 2 and len(bottom_pts) == 2:
-                    top_angle = math.degrees(math.atan2(top_pts[1][1] - top_pts[0][1], top_pts[1][0] - top_pts[0][0]))
-                    bottom_angle = math.degrees(math.atan2(bottom_pts[1][1] - bottom_pts[0][1], bottom_pts[1][0] - bottom_pts[0][0]))
-                    edge_diff = self._angle_diff(top_angle, bottom_angle)
-                    measurements["cap_edge_angle_diff"] = edge_diff
-                    if edge_diff > 10.0:
-                        ring_broken = True
-                    if lines is not None:
-                        top_edge_straight = self._is_straight_edge(
-                            lines,
-                            tuple(top_pts[0]),
-                            tuple(top_pts[1]),
-                            rx1,
-                            ry1,
-                            angle_tol=20.0,
-                        )
-                        measurements["cap_top_edge_straight"] = top_edge_straight
+                        if area_ratio < 0.8:
+                            measurements["cap_area_ratio_status"] = "cap_missing"
+                            status.append("cap_missing")
+                            cap_broken = False
+                            ring_broken = False
+                        elif area_ratio < 0.95:
+                            measurements["cap_area_ratio_status"] = "cap_broken"
+                            cap_broken = True
+                        else:
+                            measurements["cap_area_ratio_status"] = "ok"
+
+                measurements["cap_top_edge_line"] = None
+                measurements["cap_bottom_edge_line"] = None
+                if "cap_missing" not in status:
+                    cap_cnt = region.get("contour")
+                    if cap_cnt is not None:
+                        pts = cap_cnt.reshape(-1, 2)
+                        x = pts[:, 0].astype(float)
+                        y = pts[:, 1].astype(float)
+                        sum_xy = x + y
+                        diff_xy = x - y
+                        top_left = tuple(pts[int(np.argmin(sum_xy))])
+                        bottom_right = tuple(pts[int(np.argmax(sum_xy))])
+                        bottom_left = tuple(pts[int(np.argmin(diff_xy))])
+                        top_right = tuple(pts[int(np.argmax(diff_xy))])
+                        if top_left != top_right and bottom_left != bottom_right:
+                            top_line = (top_left, top_right)
+                            bottom_line = (bottom_left, bottom_right)
+                            measurements["cap_top_edge_line"] = top_line
+                            measurements["cap_bottom_edge_line"] = bottom_line
+                            top_angle = math.degrees(math.atan2(top_right[1] - top_left[1], top_right[0] - top_left[0]))
+                            bottom_angle = math.degrees(math.atan2(bottom_right[1] - bottom_left[1], bottom_right[0] - bottom_left[0]))
+                            edge_diff = self._angle_diff(top_angle, bottom_angle)
+                            measurements["cap_edge_angle_diff"] = edge_diff
+                            if edge_diff > 5.0:
+                                ring_broken = True
+                            if lines is not None:
+                                top_edge_straight = self._is_straight_edge(
+                                    lines,
+                                    top_line[0],
+                                    top_line[1],
+                                    rx1,
+                                    ry1,
+                                    angle_tol=20.0,
+                                )
+                                measurements["cap_top_edge_straight"] = top_edge_straight
 
             # Cap broken if a single cap zone contains a fully surrounded hole above threshold.
             hole_contours = []
-            if len(cap_regions) == 1 and cap_mask is not None:
+            if "cap_missing" not in status and len(cap_regions) == 1 and cap_mask is not None:
                 contours_holes, hierarchy_holes = cv2.findContours(cap_mask.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
                 if hierarchy_holes is not None and contours_holes:
                     hierarchy = hierarchy_holes[0]
@@ -356,12 +411,14 @@ class Classical2:
 
         # Determine numeric status code
         status_code = 2
-        if cap_cnt is None:
+        if "cap_missing" in status:
             status_code = 4
-        elif "cap_crooked" in status or "cap_broken" in status:
-            status_code = 0
+        elif cap_cnt is None:
+            status_code = 4
         elif "ring_broken" in status:
             status_code = 1
+        elif "cap_broken" in status:
+            status_code = 0
         elif "cap_loose" in status:
             status_code = 3
         else:
@@ -439,12 +496,31 @@ def main():
             cv2.drawContours(hole_overlay, [cnt], -1, (0, 0, 255), cv2.FILLED)
         cv2.addWeighted(hole_overlay, 0.5, cap_img, 0.5, 0, cap_img)
 
+    # Mark cap top and bottom edges on cap.jpg if detected
+    cap_top_edge_line = r["measurements"].get("cap_top_edge_line")
+    if cap_top_edge_line is not None:
+        edge_overlay = cap_img.copy()
+        cv2.line(edge_overlay, cap_top_edge_line[0], cap_top_edge_line[1], (0, 255, 255), 3)
+        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
+    cap_bottom_edge_line = r["measurements"].get("cap_bottom_edge_line")
+    if cap_bottom_edge_line is not None:
+        edge_overlay = cap_img.copy()
+        cv2.line(edge_overlay, cap_bottom_edge_line[0], cap_bottom_edge_line[1], (255, 0, 0), 3)
+        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
+
     # Mark bottle contact line on bottle.jpg if detected
     contact_line = r["measurements"].get("bottle_contact_line")
     if contact_line is not None:
         line_overlay = bottle_img.copy()
         cv2.line(line_overlay, contact_line[0], contact_line[1], (255, 0, 0), 4)
         cv2.addWeighted(line_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
+
+    # Mark upper half bottle width on bottle.jpg if detected
+    upper_width_line = r["measurements"].get("bottle_upper_width_line")
+    if upper_width_line is not None:
+        upper_overlay = bottle_img.copy()
+        cv2.line(upper_overlay, upper_width_line[0], upper_width_line[1], (0, 255, 255), 4)
+        cv2.addWeighted(upper_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
 
     cv2.imwrite(str(result_dir / "background.jpg"), bg_img)
     cv2.imwrite(str(result_dir / "bottle.jpg"), bottle_img)
