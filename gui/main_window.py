@@ -9,9 +9,12 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from config import RESULTS_DIR  # noqa: E402
+from gui.services.classical2_params_state import Classical2ParamsState  # noqa: E402
 from gui.components.augmentation_config import AugmentationConfigComponent  # noqa: E402
 from gui.components.augmentation_viewer import AugmentationViewerComponent  # noqa: E402
 from gui.components.data_loader import DataLoaderComponent  # noqa: E402
+from gui.components.classical2_config_analyze import Classical2ConfigAnalyzeComponent  # noqa: E402
+from gui.components.classical2_evaluation import Classical2EvaluationComponent  # noqa: E402
 from gui.components.export_results import ExportResultsComponent  # noqa: E402
 from gui.components.methods_panel import MethodsPanelComponent  # noqa: E402
 from gui.components.results_comparison import ResultsComparisonComponent  # noqa: E402
@@ -44,6 +47,10 @@ class MainWindow:
 
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
+        view_menu.add_command(
+            label="Open classical errors folder", command=self._open_classical_errors_folder
+        )
+        view_menu.add_separator()
         view_menu.add_command(
             label="Reset Layout", command=self._reset_layout
         )
@@ -99,6 +106,24 @@ class MainWindow:
         )
         self.notebook.add(self.export_tab, text="Export")
 
+        self.classical2_params = Classical2ParamsState()
+
+        self.classical2_config_tab = Classical2ConfigAnalyzeComponent(
+            self.notebook,
+            data_loader=self.data_loader_tab,
+            params_state=self.classical2_params,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.classical2_config_tab, text="Classical Config & Analyze")
+
+        self.classical2_eval_tab = Classical2EvaluationComponent(
+            self.notebook,
+            params_state=self.classical2_params,
+            config_tab=self.classical2_config_tab,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.classical2_eval_tab, text="Classical Evaluation")
+
     def _create_status_bar(self) -> None:
         self.status_bar = tk.Label(
             self.root,
@@ -112,6 +137,20 @@ class MainWindow:
 
     def _reset_layout(self) -> None:
         self.root.geometry("1280x860")
+
+    def _open_classical_errors_folder(self) -> None:
+        import os
+        import subprocess
+
+        path = Path(__file__).resolve().parents[1] / "classical" / "result" / "errors"
+        path.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(str(path))  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+        self.update_status("Opened classical errors folder")
 
     def _open_results_folder(self) -> None:
         import os
@@ -132,7 +171,7 @@ class MainWindow:
             "About",
             "TWM Project - Bottle Cap Classification\n\n"
             "GUI for data loading, augmentation, training pipeline,\n"
-            "classical and ML methods, results comparison, and export.",
+            "classical/ML methods, Classical2 rule-based CV, and export.",
         )
 
     def update_status(self, message: str) -> None:

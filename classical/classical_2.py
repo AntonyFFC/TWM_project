@@ -12,27 +12,53 @@ class Classical2:
     The returned dict contains status, measurements and an annotated image.
     """
 
-    def __init__(self, params: Dict[str, Any] = None):
-        # default parameters (tune these for your dataset)
-        defaults = {
-            # V-channel ranges for zone detection
+    _RANGE_KEYS = ("bg_v_range", "bottle_v_range", "cap_v_range")
+
+    @classmethod
+    def get_default_params(cls) -> Dict[str, Any]:
+        return {
             "bg_v_range": (0, 45),
             "bottle_v_range": (46, 129),
             "cap_v_range": (130, 255),
-            # morphology
+            "v_normalize_target": 210,
             "erode_iter": 2,
             "dilate_iter": 1,
             "kernel_size": 2,
-            # heuristics
-            "angle_thresh_deg": 10.0,  # degrees -> crooked
-            "distance_prop_thresh": 0.12,  # proportion of bottle height -> loose
-            "line_length_prop": 0.6,  # proportion of cap diameter for line detection
-            "cap_rectangularity_thresh": 0.6,  # contour area / minAreaRect area
-            "cap_relative_area_thresh": 0.05,  # relative to whole image area
+            "angle_thresh_deg": 10.0,
+            "distance_prop_thresh": 0.12,
+            "line_length_prop": 0.6,
+            "cap_rectangularity_thresh": 0.6,
+            "cap_relative_area_thresh": 0.05,
+            "second_cap_area_ratio": 0.1,
+            "min_bottle_contour_area": 100,
+            "contact_band_prop": 0.15,
+            "upper_half_prop": 0.5,
+            "loose_contact_prop_thresh": 0.85,
+            "cap_area_missing_thresh": 0.8,
+            "cap_area_broken_thresh": 0.95,
+            "cap_hole_area_prop_thresh": 0.04,
+            "ring_edge_angle_thresh": 5.0,
+            "canny_low": 50,
+            "canny_high": 150,
+            "hough_threshold": 20,
+            "hough_max_line_gap": 10,
+            "cap_roi_pad": 2,
+            "straight_edge_threshold_ratio": 0.7,
+            "straight_edge_angle_tol": 20.0,
         }
-        self.p = defaults
+
+    @classmethod
+    def normalize_params(cls, params: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(params)
+        for key in cls._RANGE_KEYS:
+            if key in out and isinstance(out[key], list):
+                out[key] = tuple(out[key])
+        return out
+
+    def __init__(self, params: Dict[str, Any] | None = None):
+        self.p = self.get_default_params()
         if params:
-            self.p.update(params)
+            self.p.update(self.normalize_params(params))
 
     def _morph_clean(self, mask: np.ndarray) -> np.ndarray:
         k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.p["kernel_size"],) * 2)
@@ -112,8 +138,10 @@ class Classical2:
 
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         v = hsv[:, :, 2]
-        if int(v.max()) < 210:
-            v_norm = cv2.normalize(v, None, alpha=0, beta=210, norm_type=cv2.NORM_MINMAX)
+        if int(v.max()) < self.p["v_normalize_target"]:
+            v_norm = cv2.normalize(
+                v, None, alpha=0, beta=self.p["v_normalize_target"], norm_type=cv2.NORM_MINMAX
+            )
             hsv[:, :, 2] = v_norm
             img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -145,7 +173,7 @@ class Classical2:
         bottle_cnt = self._find_largest_contour(bottle_mask)
         bottle_box = None
         bottle_angle = 0.0
-        if bottle_cnt is not None and cv2.contourArea(bottle_cnt) > 100:
+        if bottle_cnt is not None and cv2.contourArea(bottle_cnt) > self.p["min_bottle_contour_area"]:
             rect_b = cv2.minAreaRect(bottle_cnt)
             bottle_box_pts = cv2.boxPoints(rect_b).astype(int)
             x, y, w, h = cv2.boundingRect(bottle_cnt)
@@ -169,7 +197,7 @@ class Classical2:
             largest_area = cv2.contourArea(contours[0])
             if largest_area > min_cap_area:
                 candidates = [contours[0]]
-                if len(contours) > 1 and cv2.contourArea(contours[1]) > 0.1 * largest_area:
+                if len(contours) > 1 and cv2.contourArea(contours[1]) > self.p["second_cap_area_ratio"] * largest_area:
                     candidates.append(contours[1])
 
                 for idx, cnt in enumerate(candidates):
@@ -252,7 +280,7 @@ class Classical2:
             if bottle_box is not None:
                 bx, by, bw, bh = bottle_box
                 measurements["bottle_width"] = bw
-                band_h = max(1, int(bh * 0.15))
+                band_h = max(1, int(bh * self.p["contact_band_prop"]))
                 band = bottle_mask[by:by + band_h, bx:bx + bw]
                 max_contact = 0.0
                 contact_line = None
@@ -273,7 +301,7 @@ class Classical2:
                 measurements["bottle_contact_line"] = contact_line
                 upper_width = bw
                 upper_width_line = None
-                half_h = max(1, int(bh * 0.5))
+                half_h = max(1, int(bh * self.p["upper_half_prop"]))
                 upper_mask = bottle_mask[by:by + half_h, bx:bx + bw]
                 ys, xs = np.where(upper_mask > 0)
                 if xs.size > 0:
@@ -292,7 +320,7 @@ class Classical2:
                 else:
                     prop = 0.0
                 measurements["bottle_contact_prop"] = prop
-                if prop < 0.85:
+                if prop < self.p["loose_contact_prop_thresh"]:
                     status.append("cap_loose")
                 if diff > self.p["angle_thresh_deg"]:
                     status.append("cap_crooked")
@@ -305,13 +333,20 @@ class Classical2:
             lines = None
             if cap_box is not None:
                 x, y, w, h = cap_box
-                pad = 2
+                pad = self.p["cap_roi_pad"]
                 rx1, ry1 = max(x - pad, 0), max(y - pad, 0)
                 rx2, ry2 = min(x + w + pad, img.shape[1]), min(y + h + pad, img.shape[0])
                 roi = gray[ry1:ry2, rx1:rx2]
-                edges = cv2.Canny(roi, 50, 150)
+                edges = cv2.Canny(roi, self.p["canny_low"], self.p["canny_high"])
                 min_len = int(max(w, h) * self.p["line_length_prop"])
-                lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=20, minLineLength=min_len, maxLineGap=10)
+                lines = cv2.HoughLinesP(
+                    edges,
+                    1,
+                    np.pi / 180,
+                    threshold=self.p["hough_threshold"],
+                    minLineLength=min_len,
+                    maxLineGap=self.p["hough_max_line_gap"],
+                )
                 if lines is None or len(lines) == 0:
                     lines = None
 
@@ -328,12 +363,12 @@ class Classical2:
                     if hull_area > 0:
                         area_ratio = cap_area / hull_area
                         measurements["cap_area_ratio"] = area_ratio
-                        if area_ratio < 0.8:
+                        if area_ratio < self.p["cap_area_missing_thresh"]:
                             measurements["cap_area_ratio_status"] = "cap_missing"
                             status.append("cap_missing")
                             cap_broken = False
                             ring_broken = False
-                        elif area_ratio < 0.95:
+                        elif area_ratio < self.p["cap_area_broken_thresh"]:
                             measurements["cap_area_ratio_status"] = "cap_broken"
                             cap_broken = True
                         else:
@@ -362,7 +397,7 @@ class Classical2:
                             bottom_angle = math.degrees(math.atan2(bottom_right[1] - bottom_left[1], bottom_right[0] - bottom_left[0]))
                             edge_diff = self._angle_diff(top_angle, bottom_angle)
                             measurements["cap_edge_angle_diff"] = edge_diff
-                            if edge_diff > 5.0:
+                            if edge_diff > self.p["ring_edge_angle_thresh"]:
                                 ring_broken = True
                             if lines is not None:
                                 top_edge_straight = self._is_straight_edge(
@@ -371,7 +406,8 @@ class Classical2:
                                     top_line[1],
                                     rx1,
                                     ry1,
-                                    angle_tol=20.0,
+                                    threshold_ratio=self.p["straight_edge_threshold_ratio"],
+                                    angle_tol=self.p["straight_edge_angle_tol"],
                                 )
                                 measurements["cap_top_edge_straight"] = top_edge_straight
 
@@ -388,7 +424,7 @@ class Classical2:
                         hole_contours = [contours_holes[idx] for idx in hole_indices]
                         hole_area = sum(cv2.contourArea(cnt) for cnt in hole_contours)
                         cap_area = cv2.contourArea(cap_cnt)
-                        if hole_area >= 0.05 * max(cap_area, 1.0):
+                        if hole_area >= self.p["cap_hole_area_prop_thresh"] * max(cap_area, 1.0):
                             cap_broken = True
                             measurements["cap_hole_area"] = hole_area
                             measurements["cap_hole_area_prop"] = hole_area / max(cap_area, 1.0)
@@ -445,30 +481,15 @@ class Classical2:
         return result
 
 
-def save_analysis_visualizations(
-    result: dict[str, Any],
-    out_dir: Path,
-    *,
-    annotated_name: str = "annotated.jpg",
-    original_path: Path | None = None,
-) -> None:
-    """Save annotated image and debug mask overlays to ``out_dir``."""
+def build_analysis_visualizations(result: dict[str, Any]) -> dict[str, Any]:
+    """Return BGR preview images: annotated, background, bottle, cap."""
     import cv2
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if original_path is not None and original_path.exists():
-        import shutil
-
-        shutil.copy2(original_path, out_dir / "original.jpg")
-
-    cv2.imwrite(str(out_dir / annotated_name), result["annotated"])
 
     bg_img = cv2.cvtColor(result["bg_mask"], cv2.COLOR_GRAY2BGR)
     bottle_img = cv2.cvtColor(result["bottle_mask"], cv2.COLOR_GRAY2BGR)
     cap_img = cv2.cvtColor(result["cap_mask"], cv2.COLOR_GRAY2BGR)
-
     measurements = result["measurements"]
+
     bottle_box_pts = measurements.get("bottle_box_pts")
     if bottle_box_pts is not None:
         cv2.polylines(bottle_img, [bottle_box_pts], True, (0, 255, 0), 2)
@@ -517,29 +538,71 @@ def save_analysis_visualizations(
         cv2.line(upper_overlay, upper_width_line[0], upper_width_line[1], (0, 255, 255), 4)
         cv2.addWeighted(upper_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
 
-    cv2.imwrite(str(out_dir / "background.jpg"), bg_img)
-    cv2.imwrite(str(out_dir / "bottle.jpg"), bottle_img)
-    cv2.imwrite(str(out_dir / "cap.jpg"), cap_img)
+    return {
+        "annotated": result["annotated"],
+        "background": bg_img,
+        "bottle": bottle_img,
+        "cap": cap_img,
+    }
 
 
-def write_analysis_report(
+def save_analysis_visualizations(
     result: dict[str, Any],
-    out_path: Path,
+    out_dir: Path,
+    *,
+    annotated_name: str = "annotated.jpg",
+    original_path: Path | None = None,
+) -> None:
+    """Save annotated image and debug mask overlays to ``out_dir``."""
+    import cv2
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if original_path is not None and original_path.exists():
+        import shutil
+
+        shutil.copy2(original_path, out_dir / "original.jpg")
+
+    images = build_analysis_visualizations(result)
+    cv2.imwrite(str(out_dir / annotated_name), images["annotated"])
+    cv2.imwrite(str(out_dir / "background.jpg"), images["background"])
+    cv2.imwrite(str(out_dir / "bottle.jpg"), images["bottle"])
+    cv2.imwrite(str(out_dir / "cap.jpg"), images["cap"])
+
+
+def format_analysis_report(
+    result: dict[str, Any],
     *,
     expected: list[int] | None = None,
     score: float | None = None,
-) -> None:
-    """Write a text summary of analysis results for manual review."""
+) -> str:
+    """Return report text without writing to disk."""
+    from classical.classical2_labels import (
+        MEASUREMENT_LABELS,
+        describe_match,
+        format_code,
+        format_codes,
+        format_status_list,
+    )
+
     m = result["measurements"]
+    code = result.get("status_code")
+    status_list = result.get("status_list", [])
+
     lines = [
-        f"status_code: {result.get('status_code')}",
-        f"status_list: {', '.join(result.get('status_list', []))}",
+        "=== Classification ===",
+        f"Predicted: {format_code(code)}",
+        f"Status flags: {format_status_list(status_list)}",
     ]
     if expected is not None:
-        lines.append(f"expected: {expected}")
+        lines.append(f"Expected (dataset): {format_codes(expected)}")
+        lines.append(f"Match: {describe_match(expected, code)}")
+    elif score is None:
+        lines.append("Expected (dataset): not loaded — set labels folder or use dataset images")
     if score is not None:
-        lines.append(f"score: {score}")
+        lines.append(f"Score: {score} (1.0=full, 0.5=partial, 0.0=wrong)")
     lines.append("")
+    lines.append("=== Measurements ===")
     keys = (
         "bottle_contact_prop",
         "bottle_contact_width",
@@ -554,12 +617,31 @@ def write_analysis_report(
     for key in keys:
         if key in m and m[key] is not None:
             val = m[key]
+            desc = MEASUREMENT_LABELS.get(key, key)
             if isinstance(val, float):
-                lines.append(f"{key}: {val:.4f}")
+                lines.append(f"{desc}")
+                lines.append(f"  {key}: {val:.4f}")
             else:
-                lines.append(f"{key}: {val}")
-    lines.append(f"cap_regions: {len(m.get('cap_regions', []))}")
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                lines.append(f"{desc}")
+                lines.append(f"  {key}: {val}")
+    n_regions = len(m.get("cap_regions", []))
+    lines.append(MEASUREMENT_LABELS.get("cap_regions", "cap_regions"))
+    lines.append(f"  cap_regions: {n_regions}")
+    return "\n".join(lines) + "\n"
+
+
+def write_analysis_report(
+    result: dict[str, Any],
+    out_path: Path,
+    *,
+    expected: list[int] | None = None,
+    score: float | None = None,
+) -> None:
+    """Write a text summary of analysis results for manual review."""
+    out_path.write_text(
+        format_analysis_report(result, expected=expected, score=score),
+        encoding="utf-8",
+    )
 
 
 def main():
