@@ -250,41 +250,41 @@ class Classical2:
             measurements["bottle_contact_prop"] = None
             measurements["bottle_contact_line"] = None
             if bottle_box is not None:
-                _, _, bw, bh = bottle_box
+                bx, by, bw, bh = bottle_box
                 measurements["bottle_width"] = bw
-                top_y = bottle_box[1]
                 band_h = max(1, int(bh * 0.15))
-                band = bottle_mask[top_y:top_y + band_h, bottle_box[0]:bottle_box[0] + bw]
-                max_contact = 0
+                band = bottle_mask[by:by + band_h, bx:bx + bw]
+                max_contact = 0.0
                 contact_line = None
-                for row_idx, row in enumerate(band):
-                    cols = np.where(row > 0)[0]
-                    if cols.size > 0:
-                        segments = np.split(cols, np.where(np.diff(cols) != 1)[0] + 1)
-                        for seg in segments:
-                            length = len(seg)
-                            if length > max_contact:
-                                max_contact = length
-                                contact_line = (
-                                    (bottle_box[0] + int(seg[0]), top_y + row_idx),
-                                    (bottle_box[0] + int(seg[-1]), top_y + row_idx),
-                                )
+                # Test: widest span in top 15% (same idea as upper_width, not per-row segments)
+                ys_band, xs_band = np.where(band > 0)
+                if xs_band.size > 0:
+                    left_idx = int(np.argmin(xs_band))
+                    right_idx = int(np.argmax(xs_band))
+                    left_pt = (bx + int(xs_band[left_idx]), by + int(ys_band[left_idx]))
+                    right_pt = (bx + int(xs_band[right_idx]), by + int(ys_band[right_idx]))
+                    max_contact = float(
+                        np.linalg.norm(
+                            np.array(right_pt, dtype=float) - np.array(left_pt, dtype=float)
+                        )
+                    )
+                    contact_line = (left_pt, right_pt)
                 measurements["bottle_contact_width"] = max_contact
                 measurements["bottle_contact_line"] = contact_line
                 upper_width = bw
                 upper_width_line = None
-                if bottle_box is not None:
-                    bx, by, bw, bh = bottle_box
-                    half_h = max(1, int(bh * 0.5))
-                    upper_mask = bottle_mask[by:by + half_h, bx:bx + bw]
-                    ys, xs = np.where(upper_mask > 0)
-                    if xs.size > 0:
-                        left_idx = int(np.argmin(xs))
-                        right_idx = int(np.argmax(xs))
-                        left_pt = (bx + int(xs[left_idx]), by + int(ys[left_idx]))
-                        right_pt = (bx + int(xs[right_idx]), by + int(ys[right_idx]))
-                        upper_width = float(np.linalg.norm(np.array(right_pt, dtype=float) - np.array(left_pt, dtype=float)))
-                        upper_width_line = (left_pt, right_pt)
+                half_h = max(1, int(bh * 0.5))
+                upper_mask = bottle_mask[by:by + half_h, bx:bx + bw]
+                ys, xs = np.where(upper_mask > 0)
+                if xs.size > 0:
+                    left_idx = int(np.argmin(xs))
+                    right_idx = int(np.argmax(xs))
+                    left_pt = (bx + int(xs[left_idx]), by + int(ys[left_idx]))
+                    right_pt = (bx + int(xs[right_idx]), by + int(ys[right_idx]))
+                    upper_width = float(
+                        np.linalg.norm(np.array(right_pt, dtype=float) - np.array(left_pt, dtype=float))
+                    )
+                    upper_width_line = (left_pt, right_pt)
                 measurements["bottle_upper_width"] = upper_width
                 measurements["bottle_upper_width_line"] = upper_width_line
                 if upper_width > 0:
@@ -445,6 +445,123 @@ class Classical2:
         return result
 
 
+def save_analysis_visualizations(
+    result: dict[str, Any],
+    out_dir: Path,
+    *,
+    annotated_name: str = "annotated.jpg",
+    original_path: Path | None = None,
+) -> None:
+    """Save annotated image and debug mask overlays to ``out_dir``."""
+    import cv2
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if original_path is not None and original_path.exists():
+        import shutil
+
+        shutil.copy2(original_path, out_dir / "original.jpg")
+
+    cv2.imwrite(str(out_dir / annotated_name), result["annotated"])
+
+    bg_img = cv2.cvtColor(result["bg_mask"], cv2.COLOR_GRAY2BGR)
+    bottle_img = cv2.cvtColor(result["bottle_mask"], cv2.COLOR_GRAY2BGR)
+    cap_img = cv2.cvtColor(result["cap_mask"], cv2.COLOR_GRAY2BGR)
+
+    measurements = result["measurements"]
+    bottle_box_pts = measurements.get("bottle_box_pts")
+    if bottle_box_pts is not None:
+        cv2.polylines(bottle_img, [bottle_box_pts], True, (0, 255, 0), 2)
+        bx, by = bottle_box_pts[0]
+        cv2.putText(
+            bottle_img, "B", (bx + 4, by - 6),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA,
+        )
+
+    for idx, region in enumerate(measurements.get("cap_regions", []), start=1):
+        box = region["box"]
+        cv2.polylines(cap_img, [box], True, (0, 255, 0), 2)
+        bx, by, _bw, _bh = region["bbox"]
+        label = str(idx)
+        text_pos = (bx + 6, by + 20)
+        cv2.putText(cap_img, label, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4, cv2.LINE_AA)
+        cv2.putText(cap_img, label, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+
+    hole_contours = result.get("hole_contours", [])
+    if hole_contours:
+        hole_overlay = cap_img.copy()
+        for cnt in hole_contours:
+            cv2.drawContours(hole_overlay, [cnt], -1, (0, 0, 255), cv2.FILLED)
+        cv2.addWeighted(hole_overlay, 0.5, cap_img, 0.5, 0, cap_img)
+
+    cap_top_edge_line = measurements.get("cap_top_edge_line")
+    if cap_top_edge_line is not None:
+        edge_overlay = cap_img.copy()
+        cv2.line(edge_overlay, cap_top_edge_line[0], cap_top_edge_line[1], (0, 255, 255), 3)
+        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
+    cap_bottom_edge_line = measurements.get("cap_bottom_edge_line")
+    if cap_bottom_edge_line is not None:
+        edge_overlay = cap_img.copy()
+        cv2.line(edge_overlay, cap_bottom_edge_line[0], cap_bottom_edge_line[1], (255, 0, 0), 3)
+        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
+
+    contact_line = measurements.get("bottle_contact_line")
+    if contact_line is not None:
+        line_overlay = bottle_img.copy()
+        cv2.line(line_overlay, contact_line[0], contact_line[1], (255, 0, 0), 4)
+        cv2.addWeighted(line_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
+
+    upper_width_line = measurements.get("bottle_upper_width_line")
+    if upper_width_line is not None:
+        upper_overlay = bottle_img.copy()
+        cv2.line(upper_overlay, upper_width_line[0], upper_width_line[1], (0, 255, 255), 4)
+        cv2.addWeighted(upper_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
+
+    cv2.imwrite(str(out_dir / "background.jpg"), bg_img)
+    cv2.imwrite(str(out_dir / "bottle.jpg"), bottle_img)
+    cv2.imwrite(str(out_dir / "cap.jpg"), cap_img)
+
+
+def write_analysis_report(
+    result: dict[str, Any],
+    out_path: Path,
+    *,
+    expected: list[int] | None = None,
+    score: float | None = None,
+) -> None:
+    """Write a text summary of analysis results for manual review."""
+    m = result["measurements"]
+    lines = [
+        f"status_code: {result.get('status_code')}",
+        f"status_list: {', '.join(result.get('status_list', []))}",
+    ]
+    if expected is not None:
+        lines.append(f"expected: {expected}")
+    if score is not None:
+        lines.append(f"score: {score}")
+    lines.append("")
+    keys = (
+        "bottle_contact_prop",
+        "bottle_contact_width",
+        "bottle_upper_width",
+        "angle_diff_deg",
+        "cap_area_ratio",
+        "cap_area_ratio_status",
+        "cap_hole_area_prop",
+        "cap_edge_angle_diff",
+        "cap_top_edge_straight",
+    )
+    for key in keys:
+        if key in m and m[key] is not None:
+            val = m[key]
+            if isinstance(val, float):
+                lines.append(f"{key}: {val:.4f}")
+            else:
+                lines.append(f"{key}: {val}")
+    lines.append(f"cap_regions: {len(m.get('cap_regions', []))}")
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Run classical_2 cap analyzer on an image")
@@ -466,69 +583,12 @@ def main():
         print()
 
     result_dir = Path(__file__).resolve().parent / "result"
-    result_dir.mkdir(parents=True, exist_ok=True)
-
-    bg_img = cv2.cvtColor(r["bg_mask"], cv2.COLOR_GRAY2BGR)
-    bottle_img = cv2.cvtColor(r["bottle_mask"], cv2.COLOR_GRAY2BGR)
-    cap_img = cv2.cvtColor(r["cap_mask"], cv2.COLOR_GRAY2BGR)
-
-    bottle_box_pts = r["measurements"].get("bottle_box_pts")
-    if bottle_box_pts is not None:
-        cv2.polylines(bottle_img, [bottle_box_pts], True, (0, 255, 0), 2)
-        bx, by = bottle_box_pts[0]
-        cv2.putText(bottle_img, "B", (bx + 4, by - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-
-    # Draw detected cap regions on saved cap.jpg
-    for idx, region in enumerate(r["measurements"].get("cap_regions", []), start=1):
-        box = region["box"]
-        cv2.polylines(cap_img, [box], True, (0, 255, 0), 2)
-        bx, by, bw, bh = region["bbox"]
-        label = str(idx)
-        text_pos = (bx + 6, by + 20)
-        cv2.putText(cap_img, label, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4, cv2.LINE_AA)
-        cv2.putText(cap_img, label, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-
-    # Mark hole region on cap.jpg if detected
-    hole_contours = r.get("hole_contours", [])
-    if hole_contours:
-        hole_overlay = cap_img.copy()
-        for cnt in hole_contours:
-            cv2.drawContours(hole_overlay, [cnt], -1, (0, 0, 255), cv2.FILLED)
-        cv2.addWeighted(hole_overlay, 0.5, cap_img, 0.5, 0, cap_img)
-
-    # Mark cap top and bottom edges on cap.jpg if detected
-    cap_top_edge_line = r["measurements"].get("cap_top_edge_line")
-    if cap_top_edge_line is not None:
-        edge_overlay = cap_img.copy()
-        cv2.line(edge_overlay, cap_top_edge_line[0], cap_top_edge_line[1], (0, 255, 255), 3)
-        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
-    cap_bottom_edge_line = r["measurements"].get("cap_bottom_edge_line")
-    if cap_bottom_edge_line is not None:
-        edge_overlay = cap_img.copy()
-        cv2.line(edge_overlay, cap_bottom_edge_line[0], cap_bottom_edge_line[1], (255, 0, 0), 3)
-        cv2.addWeighted(edge_overlay, 0.5, cap_img, 0.5, 0, cap_img)
-
-    # Mark bottle contact line on bottle.jpg if detected
-    contact_line = r["measurements"].get("bottle_contact_line")
-    if contact_line is not None:
-        line_overlay = bottle_img.copy()
-        cv2.line(line_overlay, contact_line[0], contact_line[1], (255, 0, 0), 4)
-        cv2.addWeighted(line_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
-
-    # Mark upper half bottle width on bottle.jpg if detected
-    upper_width_line = r["measurements"].get("bottle_upper_width_line")
-    if upper_width_line is not None:
-        upper_overlay = bottle_img.copy()
-        cv2.line(upper_overlay, upper_width_line[0], upper_width_line[1], (0, 255, 255), 4)
-        cv2.addWeighted(upper_overlay, 0.5, bottle_img, 0.5, 0, bottle_img)
-
-    cv2.imwrite(str(result_dir / "background.jpg"), bg_img)
-    cv2.imwrite(str(result_dir / "bottle.jpg"), bottle_img)
-    cv2.imwrite(str(result_dir / "cap.jpg"), cap_img)
+    save_analysis_visualizations(r, result_dir, original_path=Path(args.image))
 
     if args.out:
+        import cv2
+
         cv2.imwrite(args.out, r["annotated"])
-    
 
 
 if __name__ == "__main__":

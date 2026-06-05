@@ -18,6 +18,8 @@ results/metrics/
 *.pkl
 *.joblib
 
+classical/result/
+result.csv
 # Keep directory placeholders
 !results/models/.gitkeep
 !results/plots/.gitkeep
