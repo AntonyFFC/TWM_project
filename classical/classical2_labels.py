@@ -23,14 +23,14 @@ STATUS_FLAG_LABELS: dict[str, str] = {
     "cap_loose": "Loose Cap — neck contact too narrow",
     "cap_broken": "Broken Cap — irregular shape or hole in cap",
     "ring_broken": "Broken Ring — split cap or edge angle mismatch",
-    "cap_crooked": "Cap crooked — angle vs bottle (may not change final class)",
+    "cap_crooked": "Broken Cap — cap top edge tilt from horizontal exceeds threshold",
 }
 
 MEASUREMENT_LABELS: dict[str, str] = {
     "bottle_contact_prop": "Contact/upper width ratio (loose if below threshold)",
     "bottle_contact_width": "Contact width at top of bottle (px)",
     "bottle_upper_width": "Upper bottle span (px)",
-    "angle_diff_deg": "Cap vs bottle angle difference (degrees)",
+    "angle_diff_deg": "Cap top-edge tilt from horizontal (degrees)",
     "cap_area_ratio": "Cap contour / convex hull (broken if low)",
     "cap_area_ratio_status": "Cap shape check result",
     "cap_hole_area_prop": "Hole area inside cap mask (broken if above threshold)",

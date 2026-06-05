@@ -96,6 +96,29 @@ class Classical2:
         return diff if diff <= 90 else 180 - diff
 
     @staticmethod
+    def _cap_corner_points(contour) -> dict[str, tuple[int, int]] | None:
+        pts = contour.reshape(-1, 2)
+        if len(pts) < 4:
+            return None
+        x = pts[:, 0].astype(float)
+        y = pts[:, 1].astype(float)
+        sum_xy = x + y
+        diff_xy = x - y
+        return {
+            "top_left": tuple(pts[int(np.argmin(sum_xy))]),
+            "top_right": tuple(pts[int(np.argmax(diff_xy))]),
+            "bottom_left": tuple(pts[int(np.argmin(diff_xy))]),
+            "bottom_right": tuple(pts[int(np.argmax(sum_xy))]),
+        }
+
+    def _edge_tilt_from_horizontal(
+        self, p1: tuple[int, int], p2: tuple[int, int]
+    ) -> float:
+        """Degrees the edge deviates from the image horizontal (0 = level)."""
+        angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0]))
+        return self._angle_diff(angle, 0.0)
+
+    @staticmethod
     def _line_length(p1: tuple[int, int], p2: tuple[int, int]) -> float:
         return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
 
@@ -215,15 +238,11 @@ class Classical2:
                         continue
 
                     angle_diff = None
-                    if bottle_angle is not None:
-                        try:
-                            diff = abs(angle - bottle_angle)
-                            diff = diff % 180
-                            if diff > 90:
-                                diff = 180 - diff
-                            angle_diff = diff
-                        except Exception:
-                            angle_diff = None
+                    corners = self._cap_corner_points(cnt)
+                    if corners and corners["top_left"] != corners["top_right"]:
+                        angle_diff = self._edge_tilt_from_horizontal(
+                            corners["top_left"], corners["top_right"]
+                        )
 
                     cap_regions.append({
                         "rect": rect,
@@ -259,16 +278,16 @@ class Classical2:
         if cap_cnt is None:
             status.append("cap_missing")
         else:
-            # angle difference
-            try:
-                # normalize angles to [-90,90]
-                diff = abs(cap_angle - bottle_angle)
-                diff = diff % 180
-                if diff > 90:
-                    diff = 180 - diff
-            except Exception:
+            corners = self._cap_corner_points(cap_cnt)
+            if corners and corners["top_left"] != corners["top_right"]:
+                diff = self._edge_tilt_from_horizontal(
+                    corners["top_left"], corners["top_right"]
+                )
+            else:
                 diff = 0.0
             measurements["angle_diff_deg"] = diff
+            if diff > self.p["angle_thresh_deg"]:
+                status.append("cap_crooked")
 
             # loose cap if the upper bottle edge contacting the cap is too narrow
             measurements["bottle_contact_width"] = None
@@ -322,8 +341,6 @@ class Classical2:
                 measurements["bottle_contact_prop"] = prop
                 if prop < self.p["loose_contact_prop_thresh"]:
                     status.append("cap_loose")
-                if diff > self.p["angle_thresh_deg"]:
-                    status.append("cap_crooked")
 
             # Top edge straightness helper: detect lines inside the cap bbox for cap edge validation.
             cap_broken = False
@@ -379,22 +396,35 @@ class Classical2:
                 if "cap_missing" not in status:
                     cap_cnt = region.get("contour")
                     if cap_cnt is not None:
-                        pts = cap_cnt.reshape(-1, 2)
-                        x = pts[:, 0].astype(float)
-                        y = pts[:, 1].astype(float)
-                        sum_xy = x + y
-                        diff_xy = x - y
-                        top_left = tuple(pts[int(np.argmin(sum_xy))])
-                        bottom_right = tuple(pts[int(np.argmax(sum_xy))])
-                        bottom_left = tuple(pts[int(np.argmin(diff_xy))])
-                        top_right = tuple(pts[int(np.argmax(diff_xy))])
-                        if top_left != top_right and bottom_left != bottom_right:
+                        corners = self._cap_corner_points(cap_cnt)
+                        if corners is not None:
+                            top_left = corners["top_left"]
+                            top_right = corners["top_right"]
+                            bottom_left = corners["bottom_left"]
+                            bottom_right = corners["bottom_right"]
+                        else:
+                            top_left = top_right = bottom_left = bottom_right = None
+                        if (
+                            top_left is not None
+                            and top_right is not None
+                            and bottom_left is not None
+                            and bottom_right is not None
+                            and top_left != top_right
+                            and bottom_left != bottom_right
+                        ):
                             top_line = (top_left, top_right)
                             bottom_line = (bottom_left, bottom_right)
                             measurements["cap_top_edge_line"] = top_line
                             measurements["cap_bottom_edge_line"] = bottom_line
-                            top_angle = math.degrees(math.atan2(top_right[1] - top_left[1], top_right[0] - top_left[0]))
-                            bottom_angle = math.degrees(math.atan2(bottom_right[1] - bottom_left[1], bottom_right[0] - bottom_left[0]))
+                            top_angle = math.degrees(
+                                math.atan2(top_right[1] - top_left[1], top_right[0] - top_left[0])
+                            )
+                            bottom_angle = math.degrees(
+                                math.atan2(
+                                    bottom_right[1] - bottom_left[1],
+                                    bottom_right[0] - bottom_left[0],
+                                )
+                            )
                             edge_diff = self._angle_diff(top_angle, bottom_angle)
                             measurements["cap_edge_angle_diff"] = edge_diff
                             if edge_diff > self.p["ring_edge_angle_thresh"]:
@@ -445,7 +475,7 @@ class Classical2:
         if not status:
             status.append("ok")
 
-        # Determine numeric status code
+        # Determine numeric status code (fixed priority; first match wins)
         status_code = 2
         if "cap_missing" in status:
             status_code = 4
@@ -453,7 +483,7 @@ class Classical2:
             status_code = 4
         elif "ring_broken" in status:
             status_code = 1
-        elif "cap_broken" in status:
+        elif "cap_broken" in status or "cap_crooked" in status:
             status_code = 0
         elif "cap_loose" in status:
             status_code = 3

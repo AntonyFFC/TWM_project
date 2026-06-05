@@ -1,10 +1,19 @@
 {
   "name": "default",
-  "description": "Original bottle-cap.yolov8 tuning",
+  "description": "",
   "params": {
-    "bg_v_range": [0, 45],
-    "bottle_v_range": [46, 129],
-    "cap_v_range": [130, 255],
+    "bg_v_range": [
+      0,
+      45
+    ],
+    "bottle_v_range": [
+      46,
+      129
+    ],
+    "cap_v_range": [
+      130,
+      255
+    ],
     "v_normalize_target": 210,
     "erode_iter": 2,
     "dilate_iter": 1,
