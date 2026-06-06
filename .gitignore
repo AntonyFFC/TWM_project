@@ -28,6 +28,7 @@ result.csv
 # Large dataset images (optional - uncomment if you don't want to commit images)
 # bottle-cap.yolov8/train/images/
 *.jpg
+!gui/screenshots/*.jpg
 *.jpeg
 *.png
 
