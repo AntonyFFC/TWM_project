@@ -28,9 +28,12 @@ result.csv
 # Large dataset images (optional - uncomment if you don't want to commit images)
 # bottle-cap.yolov8/train/images/
 *.jpg
-!gui/screenshots/*.png
 *.jpeg
 *.png
+# Explicitly re-include png screenshots folder (must come after the global *.png rule)
+!gui/screenshots/
+!gui/screenshots/**
+!gui/screenshots/*.png
 
 # Prywatne notatki do prezentacji (NIE commitowac)
 NOTATKI_PREZENTACJA.md
