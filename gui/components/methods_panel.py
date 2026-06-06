@@ -1,4 +1,4 @@
-"""Classical and ML training panels with metrics preview."""
+"""Machine learning training panels (HOG+SVM and neural network) with metrics preview."""
 from __future__ import annotations
 
 import tkinter as tk
@@ -111,7 +111,7 @@ class _MethodColumn(ttk.LabelFrame):
             self._notify("Another task is running.")
             return
         trained_on = self._trained_on.get()  # type: ignore[arg-type]
-        label = f"{self.kind} training ({trained_on})"
+        label = f"{self.cget('text')} training ({trained_on})"
         self._run_btn.config(state=tk.DISABLED)
         self._notify(f"Starting {label}")
 
@@ -161,7 +161,7 @@ class MethodsPanelComponent(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self) -> None:
-        title = tk.Label(self, text="Classical & ML Methods", font=("Arial", 14, "bold"))
+        title = tk.Label(self, text="Machine Learning Methods", font=("Arial", 14, "bold"))
         title.pack(pady=8)
 
         hp_note = ttk.Label(
@@ -175,7 +175,7 @@ class MethodsPanelComponent(ttk.Frame):
 
         self._classical = _MethodColumn(
             paned,
-            title="Classical (HOG + SVM)",
+            title="HOG + SVM (feature-based)",
             kind="classical",
             train_fn=training_service.run_classical,
             on_status=self.on_status,
@@ -184,7 +184,7 @@ class MethodsPanelComponent(ttk.Frame):
         )
         self._ml = _MethodColumn(
             paned,
-            title="ML (ResNet18)",
+            title="Neural Network (ResNet18)",
             kind="ml",
             train_fn=training_service.run_ml,
             on_status=self.on_status,

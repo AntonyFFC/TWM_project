@@ -67,8 +67,17 @@ class ResultsComparisonComponent(ttk.Frame):
         )
         scroll_y.config(command=self._tree.yview)
         scroll_x.config(command=self._tree.xview)
+        col_titles = {
+            "method": "method",
+            "kind": "type",
+            "trained_on": "trained_on",
+            "accuracy": "accuracy",
+            "f1_macro": "f1_macro",
+            "inference_ms": "inference_ms",
+            "train_time_s": "train_time_s",
+        }
         for col in cols:
-            self._tree.heading(col, text=col)
+            self._tree.heading(col, text=col_titles.get(col, col))
             self._tree.column(col, width=100, anchor=tk.CENTER)
         self._tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
@@ -118,7 +127,7 @@ class ResultsComparisonComponent(ttk.Frame):
                 tk.END,
                 values=(
                     row.get("method", ""),
-                    row.get("kind", ""),
+                    metrics_service.format_method_kind(row.get("kind")),
                     row.get("trained_on", ""),
                     f"{row.get('accuracy', 0):.4f}",
                     f"{row.get('f1_macro', 0):.4f}",

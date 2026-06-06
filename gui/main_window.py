@@ -48,7 +48,7 @@ class MainWindow:
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="View", menu=view_menu)
         view_menu.add_command(
-            label="Open classical errors folder", command=self._open_classical_errors_folder
+            label="Open rule-based errors folder", command=self._open_classical_errors_folder
         )
         view_menu.add_separator()
         view_menu.add_command(
@@ -91,7 +91,7 @@ class MainWindow:
             self.notebook,
             on_status=self.update_status,
         )
-        self.notebook.add(self.methods_tab, text="Classical & ML")
+        self.notebook.add(self.methods_tab, text="Machine Learning")
 
         self.compare_tab = ResultsComparisonComponent(
             self.notebook,
@@ -114,7 +114,7 @@ class MainWindow:
             params_state=self.classical2_params,
             on_status=self.update_status,
         )
-        self.notebook.add(self.classical2_config_tab, text="Classical Config & Analyze")
+        self.notebook.add(self.classical2_config_tab, text="Rule-Based Config & Analyze")
 
         self.classical2_eval_tab = Classical2EvaluationComponent(
             self.notebook,
@@ -123,7 +123,7 @@ class MainWindow:
             augmentation_config=self.augmentation_config_tab,
             on_status=self.update_status,
         )
-        self.notebook.add(self.classical2_eval_tab, text="Classical Evaluation")
+        self.notebook.add(self.classical2_eval_tab, text="Rule-Based Evaluation")
 
     def _create_status_bar(self) -> None:
         self.status_bar = tk.Label(
@@ -151,7 +151,7 @@ class MainWindow:
             subprocess.run(["open", str(path)], check=False)
         else:
             subprocess.run(["xdg-open", str(path)], check=False)
-        self.update_status("Opened classical errors folder")
+        self.update_status("Opened rule-based errors folder")
 
     def _open_results_folder(self) -> None:
         import os
@@ -172,7 +172,7 @@ class MainWindow:
             "About",
             "TWM Project - Bottle Cap Classification\n\n"
             "GUI for data loading, augmentation, training pipeline,\n"
-            "classical/ML methods, Classical2 rule-based CV, and export.",
+            "machine learning (HOG+SVM, ResNet18), rule-based CV (Classical2), and export.",
         )
 
     def update_status(self, message: str) -> None:

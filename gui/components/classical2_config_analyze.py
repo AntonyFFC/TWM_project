@@ -50,7 +50,7 @@ class Classical2ConfigAnalyzeComponent(ttk.Frame):
         self._load_preset_into_form(params_state.get_preset_name())
 
     def _create_widgets(self) -> None:
-        title = tk.Label(self, text="Classical Config & Analyze", font=("Arial", 14, "bold"))
+        title = tk.Label(self, text="Rule-Based Config & Analyze", font=("Arial", 14, "bold"))
         title.pack(pady=6)
 
         paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)

@@ -100,13 +100,13 @@ def run_pipeline(
     log(f"\n### Warianty treningowe: {variants} ###")
 
     if not skip_classical:
-        log("\n### METODA KLASYCZNA: HOG + SVM ###")
+        log("\n### HOG + SVM (feature-based) ###")
         from classical import run_classical
 
         run_classical.run_all(variants)
 
     if not skip_ml:
-        log("\n### MODEL ML: ResNet18 (transfer learning) ###")
+        log("\n### Neural network: ResNet18 ###")
         from ml import run_ml
 
         run_ml.run_all(variants)

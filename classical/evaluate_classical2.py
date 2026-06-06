@@ -155,7 +155,7 @@ def plot_classical2_confusion_matrix(
 
 def format_eval_summary(result: EvalResult, *, preset_name: str) -> str:
     lines = [
-        f"Method: classical2",
+        f"Method: rule-based CV (classical2)",
         f"Preset: {preset_name}",
         f"Variant: {result.variant}",
         f"Samples: {result.total}",

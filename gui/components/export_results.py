@@ -92,11 +92,11 @@ class ExportResultsComponent(ttk.Frame):
 
         demo_opts = ttk.Frame(demo_frame)
         demo_opts.pack(fill=tk.X, padx=5, pady=4)
-        ttk.Label(demo_opts, text="Classical run:").pack(side=tk.LEFT)
+        ttk.Label(demo_opts, text="HOG+SVM run:").pack(side=tk.LEFT)
         ttk.Entry(demo_opts, textvariable=self._classical_demo_var, width=18).pack(
             side=tk.LEFT, padx=4
         )
-        ttk.Label(demo_opts, text="ML run:").pack(side=tk.LEFT)
+        ttk.Label(demo_opts, text="Neural network run:").pack(side=tk.LEFT)
         ttk.Entry(demo_opts, textvariable=self._ml_demo_var, width=18).pack(
             side=tk.LEFT, padx=4
         )

@@ -17,6 +17,18 @@ COMPARISON_PLOTS = [
     "robustness.png",
 ]
 
+# User-facing labels for method kinds stored in metrics JSON (internal: classical, ml).
+METHOD_KIND_LABELS: dict[str, str] = {
+    "classical": "HOG + SVM",
+    "ml": "Neural network",
+}
+
+
+def format_method_kind(kind: str | None) -> str:
+    if not kind:
+        return ""
+    return METHOD_KIND_LABELS.get(kind, kind)
+
 SUMMARY_CSV = METRICS_DIR / "summary.csv"
 
 
@@ -70,9 +82,10 @@ def load_summary_table() -> list[dict[str, Any]]:
 
 
 def format_report_summary(report: dict[str, Any]) -> str:
+    kind = format_method_kind(report.get("kind"))
     return (
         f"Method: {report.get('method')}\n"
-        f"Kind: {report.get('kind')}\n"
+        f"Kind: {kind}\n"
         f"Trained on: {report.get('trained_on')}\n"
         f"Accuracy: {report.get('accuracy', 0):.4f}\n"
         f"F1 macro: {report.get('f1_macro', 0):.4f}\n"

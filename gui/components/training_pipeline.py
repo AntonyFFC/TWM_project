@@ -65,8 +65,8 @@ class TrainingPipelineComponent(ttk.Frame):
         for var, text in (
             (self._skip_eda, "Skip EDA"),
             (self._skip_split, "Skip split"),
-            (self._skip_classical, "Skip classical"),
-            (self._skip_ml, "Skip ML"),
+            (self._skip_classical, "Skip HOG+SVM"),
+            (self._skip_ml, "Skip neural network"),
             (self._skip_demo, "Skip demo"),
         ):
             ttk.Checkbutton(skip_row, text=text, variable=var).pack(side=tk.LEFT, padx=6)

@@ -81,7 +81,7 @@ class Classical2EvaluationComponent(ttk.Frame):
         self._refresh_preset_names()
 
     def _create_widgets(self) -> None:
-        title = tk.Label(self, text="Classical Evaluation", font=("Arial", 14, "bold"))
+        title = tk.Label(self, text="Rule-Based Evaluation", font=("Arial", 14, "bold"))
         title.pack(pady=4)
 
         top = ttk.LabelFrame(self, text="Dataset & run")
@@ -284,7 +284,7 @@ class Classical2EvaluationComponent(ttk.Frame):
 
         self._run_btn.config(state=tk.DISABLED)
         self._append_log(f"Starting evaluation (eval_on={eval_on}, aug_copies={aug_copies})...")
-        self._notify("Running Classical2 evaluation...")
+        self._notify("Running rule-based evaluation...")
 
         def _work():
             analyzer = Classical2(params)

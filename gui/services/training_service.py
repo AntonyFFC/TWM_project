@@ -1,4 +1,4 @@
-"""Training operations for classical and ML methods."""
+"""Training operations for HOG+SVM and neural network methods."""
 from __future__ import annotations
 
 import sys
@@ -24,7 +24,7 @@ def run_classical(trained_on: TrainedOn, log: Callable[[str], None]) -> None:
     from classical import run_classical as rc
 
     variants = resolve_variants(trained_on)
-    log(f"Klasyczne: HOG+SVM x {len(variants)} wariant(y)")
+    log(f"HOG+SVM: {len(variants)} training variant(s)")
     with redirect_stdout(log):
         rc.run_all(variants)
 
@@ -33,6 +33,6 @@ def run_ml(trained_on: TrainedOn, log: Callable[[str], None]) -> None:
     from ml import run_ml as rm
 
     variants = resolve_variants(trained_on)
-    log(f"ML: ResNet18 x {len(variants)} wariant(y)")
+    log(f"Neural network (ResNet18): {len(variants)} training variant(s)")
     with redirect_stdout(log):
         rm.run_all(variants)
