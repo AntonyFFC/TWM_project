@@ -21,6 +21,7 @@ COMPARISON_PLOTS = [
 METHOD_KIND_LABELS: dict[str, str] = {
     "classical": "HOG + SVM",
     "ml": "Neural network",
+    "rule_based": "Rule-based CV",
 }
 
 

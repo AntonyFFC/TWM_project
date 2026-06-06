@@ -62,9 +62,9 @@ def _load_reports() -> tuple[pd.DataFrame, dict[str, dict]]:
 
 
 def _ordered_methods(df: pd.DataFrame) -> list[str]:
-    """Klasyczne najpierw, potem ML, w kazdej grupie alfabetycznie."""
+    """Feature-based, neural network, then rule-based CV — each group alphabetically."""
     order = []
-    for kind in ("classical", "ml"):
+    for kind in ("classical", "ml", "rule_based"):
         subset = df.loc[df["kind"] == kind, "base_method"].drop_duplicates()
         order.extend(sorted(subset.tolist()))
     return order
@@ -102,7 +102,7 @@ def plot_accuracy_comparison(df: pd.DataFrame) -> Path:
             if not np.isnan(val):
                 ax.text(xi, val + 0.01, f"{val:.2f}", ha="center", fontsize=8)
 
-    fig.suptitle("Porownanie metod: raw vs augmented training")
+    fig.suptitle("Method comparison: raw vs augmented training / evaluation")
     plt.tight_layout()
     out = PLOTS_DIR / "comparison_accuracy.png"
     plt.savefig(out, dpi=140)

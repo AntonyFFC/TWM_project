@@ -28,6 +28,7 @@ from classical.evaluate_classical2 import (
     stable_eval_seed,
     evaluate_dataset,
 )
+from gui.services import metrics_service
 from data.augmentation import augment_bgr_image, train_augmentations_full_image
 from gui.services.classical2_params_state import Classical2ParamsState
 from gui.utils.image_preview import show_bgr_on_label, show_image_on_label
@@ -326,11 +327,12 @@ class Classical2EvaluationComponent(ttk.Frame):
         if compare.raw is not None:
             lines.append(
                 f"Raw: {compare.raw.total} samples, {compare.raw.accuracy:.2f}% accuracy, "
-                f"{len(compare.raw.errors)} errors"
+                f"{compare.raw.inference_ms_per_image:.1f} ms/img, {len(compare.raw.errors)} errors"
             )
         if compare.augmented is not None:
             lines.append(
                 f"Aug: {compare.augmented.total} samples, {compare.augmented.accuracy:.2f}% accuracy, "
+                f"{compare.augmented.inference_ms_per_image:.1f} ms/img, "
                 f"{len(compare.augmented.errors)} errors"
             )
         if compare.raw and compare.augmented:
@@ -344,6 +346,18 @@ class Classical2EvaluationComponent(ttk.Frame):
         self._update_results_panel()
         self._apply_error_filter()
         self._append_log("Evaluation complete.")
+        saved = [
+            str(r.metrics_json_path)
+            for r in (compare.raw, compare.augmented)
+            if r and r.metrics_json_path
+        ]
+        if saved:
+            self._append_log("Metrics saved: " + ", ".join(saved))
+            try:
+                metrics_service.run_comparison()
+                self._append_log("Results comparison table/plots updated.")
+            except Exception as exc:
+                self._append_log(f"Comparison update skipped: {exc}")
         primary = compare.primary
         if primary:
             self._notify(f"Evaluation done: {primary.accuracy:.2f}% accuracy ({compare.eval_on})")

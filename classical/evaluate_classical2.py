@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import csv
+import json
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -94,6 +96,10 @@ class EvalResult:
     results_csv_rows: list[tuple[str, str, int, float]] = field(default_factory=list)
     variant: str = "raw"
     confusion_plot_path: Path | None = None
+    inference_ms_per_image: float = 0.0
+    y_true: list[int] = field(default_factory=list)
+    y_pred: list[int] = field(default_factory=list)
+    metrics_json_path: Path | None = None
 
     @property
     def accuracy(self) -> float:
@@ -111,11 +117,15 @@ def confusion_dict_to_matrix(
     ]
 
 
+def classical2_run_name(preset_name: str, variant: str) -> str:
+    safe = re.sub(r"[^\w\-]", "_", preset_name)
+    return f"classical2_{safe}_{variant}"
+
+
 def classical2_confusion_plot_path(preset_name: str, variant: str) -> Path:
     from config import PLOTS_DIR
 
-    safe = re.sub(r"[^\w\-]", "_", preset_name)
-    return PLOTS_DIR / f"confusion_classical2_{safe}_{variant}.png"
+    return PLOTS_DIR / f"confusion_{classical2_run_name(preset_name, variant)}.png"
 
 
 def plot_classical2_confusion_matrix(
@@ -163,10 +173,53 @@ def format_eval_summary(result: EvalResult, *, preset_name: str) -> str:
         f"Full correct: {result.full_correct}",
         f"Partial correct: {result.partial_correct}",
         f"Errors / partial: {len(result.errors)}",
+        f"Inference: {result.inference_ms_per_image:.2f} ms/img",
     ]
     if result.missing_labels:
         lines.append(f"Skipped (no label): {len(result.missing_labels)}")
     return "\n".join(lines)
+
+
+def save_classical2_metrics_report(
+    result: EvalResult,
+    *,
+    preset_name: str,
+) -> Path | None:
+    """Write Classical2 eval metrics to ``results/metrics/`` for comparison with ML runs."""
+    if result.total == 0 or not result.y_true:
+        return None
+
+    from config import CLASS_NAMES, METRICS_DIR
+    from evaluation.metrics import compute_report
+
+    run_name = classical2_run_name(preset_name, result.variant)
+    y_true = np.asarray(result.y_true, dtype=int)
+    y_pred = np.asarray(result.y_pred, dtype=int)
+
+    report = compute_report(
+        method_name=run_name,
+        base_method="classical2",
+        kind="rule_based",
+        trained_on=result.variant,
+        y_true=y_true,
+        y_pred=y_pred,
+        class_names=CLASS_NAMES,
+        inference_ms_per_image=result.inference_ms_per_image,
+        train_time_s=0.0,
+        n_train=0,
+    )
+    payload = report.to_dict()
+    payload["accuracy"] = round(result.accuracy / 100.0, 4)
+    payload["partial_credit_accuracy"] = payload["accuracy"]
+    payload["full_correct"] = result.full_correct
+    payload["partial_correct"] = result.partial_correct
+    payload["preset"] = preset_name
+    payload["confusion_matrix"] = confusion_dict_to_matrix(result.confusion)
+
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = METRICS_DIR / f"{run_name}.json"
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return out_path
 
 
 @dataclass
@@ -204,6 +257,7 @@ def _evaluate_dataset_variant(
     aug_config: dict | None = None,
     seed: int = 42,
     preset_name: str = "default",
+    save_metrics: bool = True,
     log: Callable[[str], None] | None = None,
 ) -> EvalResult:
     if not img_dir.exists() or not label_dir.exists():
@@ -219,6 +273,7 @@ def _evaluate_dataset_variant(
 
     aug_compose = train_augmentations_full_image(aug_config) if use_augmentation else None
     files = sorted(img_dir.glob(glob_pattern))
+    inference_times_ms: list[float] = []
 
     for image_path in files:
         label_path = label_dir / (image_path.stem + ".txt")
@@ -247,16 +302,20 @@ def _evaluate_dataset_variant(
             samples = [(image_path.name, None, None, None)]
 
         for sample_label, sample_img, export_stem, copy_idx in samples:
+            t0 = time.perf_counter()
             if sample_img is None:
                 result = analyzer.analyze(str(image_path))
             else:
                 result = analyzer.analyze(sample_img)
+            inference_times_ms.append((time.perf_counter() - t0) * 1000.0)
 
             status_code = result.get("status_code")
             if status_code is None:
                 raise ValueError(f"No status_code returned for {sample_label}")
 
             out.total += 1
+            out.y_true.append(expected[0])
+            out.y_pred.append(int(status_code))
             score = score_output(status_code, expected)
 
             for exp_label in set(expected):
@@ -332,6 +391,7 @@ def _evaluate_dataset_variant(
             writer.writerows(out.results_csv_rows)
 
     if out.total > 0:
+        out.inference_ms_per_image = float(np.mean(inference_times_ms))
         plot_path = classical2_confusion_plot_path(preset_name, variant)
         plot_classical2_confusion_matrix(
             out.confusion,
@@ -339,6 +399,10 @@ def _evaluate_dataset_variant(
             out_path=plot_path,
         )
         out.confusion_plot_path = plot_path
+        if save_metrics:
+            out.metrics_json_path = save_classical2_metrics_report(
+                out, preset_name=preset_name
+            )
 
     return out
 
@@ -358,6 +422,7 @@ def evaluate_dataset(
     aug_config: dict | None = None,
     seed: int = 42,
     preset_name: str = "default",
+    save_metrics: bool = True,
     log: Callable[[str], None] | None = None,
 ) -> CompareEvalResult:
     """Evaluate Classical2 on raw images, augmented copies, or both for comparison."""
@@ -393,6 +458,7 @@ def evaluate_dataset(
             aug_config=aug_config,
             seed=seed,
             preset_name=preset_name,
+            save_metrics=save_metrics,
             log=log,
         )
         if variant == "raw":

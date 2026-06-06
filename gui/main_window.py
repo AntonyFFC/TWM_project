@@ -93,19 +93,6 @@ class MainWindow:
         )
         self.notebook.add(self.methods_tab, text="Machine Learning")
 
-        self.compare_tab = ResultsComparisonComponent(
-            self.notebook,
-            on_status=self.update_status,
-        )
-        self.notebook.add(self.compare_tab, text="Results Comparison")
-
-        self.export_tab = ExportResultsComponent(
-            self.notebook,
-            data_loader=self.data_loader_tab,
-            on_status=self.update_status,
-        )
-        self.notebook.add(self.export_tab, text="Export")
-
         self.classical2_params = Classical2ParamsState()
 
         self.classical2_config_tab = Classical2ConfigAnalyzeComponent(
@@ -124,6 +111,19 @@ class MainWindow:
             on_status=self.update_status,
         )
         self.notebook.add(self.classical2_eval_tab, text="Rule-Based Evaluation")
+
+        self.compare_tab = ResultsComparisonComponent(
+            self.notebook,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.compare_tab, text="Results Comparison")
+
+        self.export_tab = ExportResultsComponent(
+            self.notebook,
+            data_loader=self.data_loader_tab,
+            on_status=self.update_status,
+        )
+        self.notebook.add(self.export_tab, text="Export")
 
     def _create_status_bar(self) -> None:
         self.status_bar = tk.Label(

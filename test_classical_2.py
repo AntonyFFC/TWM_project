@@ -128,6 +128,8 @@ def main() -> None:
     if args.export_errors:
         print(f"Exported error case(s) to: {errors_dir}")
     for label, result in (("raw", compare.raw), ("aug", compare.augmented)):
+        if result and result.metrics_json_path:
+            print(f"Metrics ({label}): {result.metrics_json_path}")
         if result and result.confusion_plot_path:
             print(f"Confusion matrix ({label}): {result.confusion_plot_path}")
 
