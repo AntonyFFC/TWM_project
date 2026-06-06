@@ -2,7 +2,7 @@ import math
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import Tuple, Dict, Any
+from typing import Dict, Any, Union
 
 
 class Classical2:
@@ -153,10 +153,16 @@ class Classical2:
                 return True
         return False
 
-    def analyze(self, image_path: str) -> Dict[str, Any]:
-        img = cv2.imread(image_path)
-        if img is None:
-            raise FileNotFoundError(image_path)
+    def analyze(self, image: Union[str, np.ndarray]) -> Dict[str, Any]:
+        if isinstance(image, str):
+            img = cv2.imread(image)
+            if img is None:
+                raise FileNotFoundError(image)
+        else:
+            img = image.copy()
+        return self._analyze_image(img)
+
+    def _analyze_image(self, img: np.ndarray) -> Dict[str, Any]:
         out = img.copy()
 
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)

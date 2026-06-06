@@ -120,6 +120,7 @@ class MainWindow:
             self.notebook,
             params_state=self.classical2_params,
             config_tab=self.classical2_config_tab,
+            augmentation_config=self.augmentation_config_tab,
             on_status=self.update_status,
         )
         self.notebook.add(self.classical2_eval_tab, text="Classical Evaluation")

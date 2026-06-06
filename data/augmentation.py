@@ -35,24 +35,133 @@ def _gauss_noise_kwargs() -> dict:
 
 def train_augmentations(image_size: int = IMAGE_SIZE) -> A.Compose:
     """Random augmentation used when building the training set."""
-    return A.Compose(
-        [
-            A.Rotate(limit=20, border_mode=cv2.BORDER_REFLECT_101, p=0.7),
-            A.HorizontalFlip(p=0.5),
+    transforms = _default_train_transforms()
+    transforms.append(A.Resize(image_size, image_size))
+    return A.Compose(transforms)
+
+
+def _default_train_transforms() -> list:
+    """Training transforms without resize (shared by crop and full-image pipelines)."""
+    return [
+        A.Rotate(limit=20, border_mode=cv2.BORDER_REFLECT_101, p=0.7),
+        A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(
+            brightness_limit=0.2, contrast_limit=0.2, p=0.6
+        ),
+        A.OneOf(
+            [
+                A.GaussianBlur(blur_limit=(3, 5), p=1.0),
+                A.MotionBlur(blur_limit=5, p=1.0),
+            ],
+            p=0.3,
+        ),
+        A.GaussNoise(p=0.3, **_gauss_noise_kwargs()),
+    ]
+
+
+def train_augmentations_full_image(config: dict | None = None) -> A.Compose:
+    """Same training-style augmentations without resizing (for full-frame CV)."""
+    if config is None:
+        return A.Compose(_default_train_transforms())
+    return build_augmentation_compose_from_config(config)
+
+
+def build_augmentation_compose_from_config(config: dict) -> A.Compose:
+    """Build an Albumentations pipeline from GUI augmentation config dict."""
+    transforms: list = []
+
+    if config.get("rotate_enabled", True):
+        limit = int(config.get("rotate_limit", 20))
+        transforms.append(
+            A.Rotate(
+                limit=limit,
+                border_mode=cv2.BORDER_REFLECT_101,
+                p=float(config.get("rotate_prob", 0.7)),
+            )
+        )
+
+    if config.get("h_flip_enabled", True):
+        transforms.append(A.HorizontalFlip(p=float(config.get("h_flip_prob", 0.5))))
+
+    if config.get("brightness_enabled", True):
+        transforms.append(
             A.RandomBrightnessContrast(
-                brightness_limit=0.2, contrast_limit=0.2, p=0.6
-            ),
-            A.OneOf(
-                [
-                    A.GaussianBlur(blur_limit=(3, 5), p=1.0),
-                    A.MotionBlur(blur_limit=5, p=1.0),
-                ],
-                p=0.3,
-            ),
-            A.GaussNoise(p=0.3, **_gauss_noise_kwargs()),
-            A.Resize(image_size, image_size),
-        ]
-    )
+                brightness_limit=float(config.get("brightness_limit", 0.2)),
+                contrast_limit=float(config.get("contrast_limit", 0.2)),
+                p=float(config.get("brightness_prob", 0.6)),
+            )
+        )
+
+    blur_enabled = config.get("blur_enabled", True)
+    m_blur_enabled = config.get("m_blur_enabled", True)
+    if blur_enabled or m_blur_enabled:
+        blur_ops: list = []
+        if blur_enabled:
+            b_limit = int(config.get("blur_limit", 5))
+            b_limit = max(3, b_limit if b_limit % 2 != 0 else b_limit + 1)
+            blur_ops.append(A.GaussianBlur(blur_limit=(3, b_limit), p=1.0))
+        if m_blur_enabled:
+            mb_limit = int(config.get("m_blur_limit", 5))
+            mb_limit = max(3, mb_limit if mb_limit % 2 != 0 else mb_limit + 1)
+            blur_ops.append(A.MotionBlur(blur_limit=(3, mb_limit), p=1.0))
+        blur_prob = float(config.get("blur_prob", 0.3))
+        if len(blur_ops) == 1:
+            transforms.append(A.OneOf(blur_ops, p=blur_prob))
+        else:
+            transforms.append(
+                A.OneOf(
+                    blur_ops,
+                    p=max(blur_prob, float(config.get("m_blur_prob", 0.3))),
+                )
+            )
+
+    if config.get("noise_enabled", True):
+        n_std = float(config.get("noise_std", 0.1))
+        version = tuple(int(p) for p in A.__version__.split(".")[:2] if p.isdigit())
+        if version >= (2, 0):
+            noise = A.GaussNoise(
+                std_range=(0.0, n_std),
+                p=float(config.get("noise_prob", 0.3)),
+            )
+        else:
+            noise = A.GaussNoise(
+                var_limit=(5.0, max(25.0, n_std * 255)),
+                p=float(config.get("noise_prob", 0.3)),
+            )
+        transforms.append(noise)
+
+    if not transforms:
+        return A.Compose(_default_train_transforms())
+    return A.Compose(transforms)
+
+
+def augment_bgr_image(
+    image_bgr: np.ndarray,
+    compose: A.Compose,
+    *,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Apply ``compose`` to a BGR image and return BGR."""
+    if seed is not None:
+        np.random.seed(seed)
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    out_rgb = compose(image=image_rgb)["image"]
+    return cv2.cvtColor(out_rgb, cv2.COLOR_RGB2BGR)
+
+
+def generate_augmented_copies_bgr(
+    image_bgr: np.ndarray,
+    n_copies: int,
+    *,
+    compose: A.Compose | None = None,
+    seed: int = 0,
+) -> list[np.ndarray]:
+    """Return ``n_copies`` independently augmented BGR images."""
+    pipeline = compose or train_augmentations_full_image()
+    copies: list[np.ndarray] = []
+    for idx in range(n_copies):
+        copies.append(augment_bgr_image(image_bgr, pipeline, seed=seed + idx))
+    return copies
 
 
 def _blur(image: np.ndarray) -> np.ndarray:

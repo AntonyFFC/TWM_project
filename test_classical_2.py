@@ -5,7 +5,32 @@ import argparse
 from pathlib import Path
 
 from classical.classical_2 import Classical2
-from classical.evaluate_classical2 import evaluate_dataset
+from classical.evaluate_classical2 import EVAL_ON_CHOICES, evaluate_dataset
+
+
+def _print_eval_result(label: str, result) -> None:
+    if result is None or result.total == 0:
+        print(f"\n=== {label}: no samples ===")
+        return
+    print(f"\n=== {label} ===")
+    print(f"Tested samples: {result.total}")
+    print(f"Fully correct: {result.full_correct}")
+    print(f"Partially correct: {result.partial_correct}")
+    print(f"Accuracy: {result.accuracy:.2f}%")
+    print()
+    print("Error matrix (expected rows, predicted columns):")
+    classes = [0, 1, 2, 3, 4]
+    header = "    " + " ".join(f"{pred:>5}" for pred in classes)
+    print(header)
+    for exp_label in classes:
+        row = (
+            f"{exp_label:>2} "
+            + " ".join(f"{result.confusion[exp_label].get(pred, 0):>5}" for pred in classes)
+        )
+        print(row)
+    if result.missing_labels:
+        print(f"Skipped images with missing or invalid labels: {len(result.missing_labels)}")
+    print(f"Misclassified / partial: {len(result.errors)}")
 
 
 def main() -> None:
@@ -44,6 +69,18 @@ def main() -> None:
         default="default",
         help="JSON preset name from classical/presets/ (default: default).",
     )
+    parser.add_argument(
+        "--eval-on",
+        choices=EVAL_ON_CHOICES,
+        default="raw",
+        help="Evaluate on original images (raw), augmented copies (aug), or both.",
+    )
+    parser.add_argument(
+        "--aug-copies",
+        type=int,
+        default=2,
+        help="Augmented copies per image when eval-on is aug or both (default: 2).",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent
@@ -59,43 +96,40 @@ def main() -> None:
         params = Classical2.get_default_params()
 
     analyzer = Classical2(params)
-    result = evaluate_dataset(
+    compare = evaluate_dataset(
         analyzer,
         img_dir,
         label_dir,
+        eval_on=args.eval_on,
         export_errors_dir=errors_dir if args.export_errors else None,
         export_partial=args.export_partial,
         clear_export_dir=args.export_errors and not args.keep_errors_dir,
         results_csv_path=root / "results.csv",
+        aug_copies=max(1, args.aug_copies),
+        preset_name=args.preset,
         log=print,
     )
 
-    if result.total == 0:
+    primary = compare.primary
+    if primary is None or primary.total == 0:
         print("No tested images found or no valid labels.")
         return
 
-    print(f"Tested images: {result.total}")
-    print(f"Fully correct: {result.full_correct}")
-    print(f"Partially correct: {result.partial_correct}")
-    print(f"Accuracy: {result.accuracy:.2f}%")
-    print()
-    print("Error matrix (expected rows, predicted columns):")
-    classes = [0, 1, 2, 3, 4]
-    header = "    " + " ".join(f"{pred:>5}" for pred in classes)
-    print(header)
-    for exp_label in classes:
-        row = (
-            f"{exp_label:>2} "
-            + " ".join(f"{result.confusion[exp_label].get(pred, 0):>5}" for pred in classes)
-        )
-        print(row)
+    if args.eval_on == "both":
+        _print_eval_result("Raw images", compare.raw)
+        _print_eval_result("Augmented images", compare.augmented)
+        if compare.raw and compare.augmented:
+            delta = compare.augmented.accuracy - compare.raw.accuracy
+            print(f"\nAccuracy delta (aug - raw): {delta:+.2f}%")
+    else:
+        _print_eval_result(args.eval_on, primary)
 
-    if result.missing_labels:
-        print(f"Skipped images with missing or invalid labels: {len(result.missing_labels)}")
-
-    print(f"\nMismatches written to: {root / 'results.csv'}")
+    print(f"\nMismatches written to: {root / 'results.csv'} (and _aug when applicable)")
     if args.export_errors:
-        print(f"Exported {len(result.errors)} error case(s) to: {errors_dir}")
+        print(f"Exported error case(s) to: {errors_dir}")
+    for label, result in (("raw", compare.raw), ("aug", compare.augmented)):
+        if result and result.confusion_plot_path:
+            print(f"Confusion matrix ({label}): {result.confusion_plot_path}")
 
 
 if __name__ == "__main__":
