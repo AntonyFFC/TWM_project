@@ -11,7 +11,7 @@ Thumbs.db
 # Project artifacts
 data/processed/
 results/models/
-results/plots/
+#results/plots/
 results/metrics/
 *.pt
 *.pth
