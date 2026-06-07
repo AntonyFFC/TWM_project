@@ -29,7 +29,7 @@ result.csv
 # bottle-cap.yolov8/train/images/
 *.jpg
 *.jpeg
-*.png
+#*.png
 # Explicitly re-include png screenshots folder (must come after the global *.png rule)
 !gui/screenshots/
 !gui/screenshots/**
