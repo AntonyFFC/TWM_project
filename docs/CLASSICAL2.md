@@ -105,6 +105,10 @@ flowchart TD
 
 **Normalizacja jasności:** Jeśli `max(V) < v_normalize_target` (domyślnie 210), rozciągamy jasność liniowo do tego poziomu. Dzięki temu ciemne zdjęcia nadal trafiają w zakresy progów `bg_v_range` / `cap_v_range` bez ręcznej korekty ekspozycji.
 
+![Kanał V — przykład luźnej nakrętki](images/classical2/loose_v_channel.png)
+
+*Kanał V: jasna nakrętka, ciemniejsza butelka i tło — podstawa segmentacji.*
+
 ---
 
 ### 2. Segmentacja po progach V
@@ -124,6 +128,9 @@ Z `V` tworzymy:
 
 **Dlaczego butelka nie z progu `bottle_v_range`?** Próg butelki bywa zawodny na krawędziach i cieniach. Bezpieczniej: **butelka = complement (tło ∪ nakrętka)** po morfologii — wszystko „w środku" sceny, co nie jest ani tłem, ani nakrętką.
 
+![Nakładka segmentacji — luźna nakrętka](images/classical2/loose_segmentation_overlay.png)
+
+*Tło (czerwone), butelka (zielona) i nakrętka (niebieska) nałożone na oryginał. Widać szczelinę między nakrętką a szyją — sygnał luźnego zamknięcia.*
 ---
 
 ### 3. Morfologia — `_morph_clean`, `_morph_clean2`, `_morph_clean3`
@@ -200,6 +207,18 @@ Kolejność sprawdzeń w kodzie (wszystkie mogą się kumulować w liście; koń
 
 **Dlaczego convex hull?** Nakrętka powinna wypełniać wypukłą otoczkę. Bardzo „dziurawa" lub resztkowa maska oznacza, że nakrętki praktycznie nie ma — nawet jeśli jakiś mały kontur przeżył filtr pola.
 
+![Wejście — butelka bez nakrętki](images/classical2/missing_original.png)
+
+*Oryginalne zdjęcie: widoczne gwinty szyi, brak jasnego regionu nakrętki.*
+
+![Maska nakrętki po morfologii](images/classical2/missing_cap_mask.png)
+
+*Po progu V i morfologii maska nakrętki jest fragmentaryczna — zbyt mała i niewypukła, żeby uznać ją za prawidłową nakrętkę.*
+
+![Wynik klasyfikacji — No Cap](images/classical2/missing_annotated.png)
+
+*Końcowa etykieta `cap_missing` → klasa **No Cap** (kod 4).*
+
 #### 7.2 Przekrzywiona nakrętka — `cap_crooked`
 
 **Warunek:** `angle_diff_deg > angle_thresh_deg` (domyślnie 10°).
@@ -217,6 +236,14 @@ Kolejność sprawdzeń w kodzie (wszystkie mogą się kumulować w liście; koń
 Jeśli `bottle_contact_prop < loose_contact_prop_thresh` (domyślnie 0.85) → nakrętka siedzi wąsko na szyi → **Loose Cap**.
 
 **Dlaczego stosunek, a nie absolutna szerokość?** Butelki mają różne skale w kadrze; proporcja kontaktu do szerokości górnej części butelki jest niezależna od rozdzielczości.
+
+![Pomiary geometryczne — luźna nakrętka](images/classical2/loose_measurements.png)
+
+*Czerwona linia **contact** (szerokość styku w górnym paśmie szyi) jest wyraźnie krótsza od żółtej **upper width** — stosunek `bottle_contact_prop` spada poniżej progu.*
+
+![Wynik klasyfikacji — Loose Cap](images/classical2/loose_annotated.png)
+
+*Końcowa etykieta `cap_loose` → klasa **Loose Cap** (kod 3).*
 
 #### 7.4 Pęknięty pierścień — `ring_broken`
 
@@ -316,9 +343,11 @@ Buduje podglądy BGR:
 
 Tekstowy raport: predykcja, flagi z opisami, opcjonalnie expected z datasetu i match (correct / partial / incorrect).
 
-### `save_analysis_visualizations`
+### `save_analysis_visualizations` / `save_pipeline_documentation`
 
 Zapisuje `original.jpg`, `annotated.jpg`, `background.jpg`, `bottle.jpg`, `cap.jpg` do wybranego katalogu (domyślnie `classical/result/` przy uruchomieniu CLI).
+
+Funkcja `save_pipeline_documentation` zapisuje ponadto **numerowane kroki pośrednie** (`01_original.png` … `14_annotated.png`) oraz plik `steps_index.txt` z opisami. Ilustracje w tym dokumencie pochodzą z folderów `classical/result/pipeline_steps/loose/` i `missing/` (kopie w [`docs/images/classical2/`](images/classical2/)).
 
 ---
 
@@ -329,9 +358,10 @@ Zapisuje `original.jpg`, `annotated.jpg`, `background.jpg`, `bottle.jpg`, `cap.j
 ```bash
 python classical/classical_2.py path/to/image.jpg
 python classical/classical_2.py path/to/image.jpg --out annotated.png
+python classical/classical_2.py path/to/image.jpg --steps-dir classical/result/pipeline_steps/moj_przyklad
 ```
 
-Wypisuje `status_code` na stdout; wizualizacje lądują w `classical/result/`.
+Wypisuje `status_code` na stdout; wizualizacje lądują w `classical/result/`, a kroki pośrednie w `classical/result/pipeline_steps/<nazwa_obrazu>/` (flaga `--no-steps` wyłącza ten zapis).
 
 ### Ewaluacja na datasecie
 
